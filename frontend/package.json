@@ -1,0 +1,37 @@
+{
+  "name": "hearth-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext ts,tsx"
+  },
+  "dependencies": {
+    "react": "^18.3",
+    "react-dom": "^18.3",
+    "react-router-dom": "^6.27"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3",
+    "@types/react-dom": "^18.3",
+    "@typescript-eslint/eslint-plugin": "^8",
+    "@typescript-eslint/parser": "^8",
+    "@testing-library/jest-dom": "^6.6",
+    "@testing-library/react": "^16.0",
+    "@testing-library/user-event": "^14.5",
+    "@vitejs/plugin-react": "^4.3",
+    "eslint": "^9",
+    "eslint-plugin-react-hooks": "^5",
+    "eslint-plugin-react-refresh": "^0.4",
+    "jsdom": "^25",
+    "typescript": "~5.6",
+    "vite": "^5.4",
+    "vitest": "^2.1"
+  }
+}

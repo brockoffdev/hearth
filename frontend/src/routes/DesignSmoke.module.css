@@ -1,0 +1,5 @@
+.placeholder {
+  padding: 2rem;
+  font-family: var(--fontBody);
+  color: var(--fgSoft);
+}
