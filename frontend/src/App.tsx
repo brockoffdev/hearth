@@ -3,7 +3,7 @@ import { Index } from './routes/Index';
 import { DesignSmoke } from './routes/DesignSmoke';
 import { Login } from './routes/Login';
 import { Setup } from './routes/Setup';
-import { SetupGooglePlaceholder } from './routes/SetupGooglePlaceholder';
+import { SetupGoogle } from './routes/SetupGoogle';
 import { SetupFamilyPlaceholder } from './routes/SetupFamilyPlaceholder';
 import { RequireAuth } from './auth/RequireAuth';
 import { WizardGate } from './auth/WizardGate';
@@ -16,7 +16,7 @@ import { WizardGate } from './auth/WizardGate';
  *
  * WizardGate redirects:
  *   must_change_password=true      → /setup
- *   must_complete_google_setup=true → /setup/google  (placeholder until Task E)
+ *   must_complete_google_setup=true → /setup/google
  */
 export function App() {
   return (
@@ -33,7 +33,7 @@ export function App() {
         }
       >
         <Route path="/setup" element={<Setup />} />
-        <Route path="/setup/google" element={<SetupGooglePlaceholder />} />
+        <Route path="/setup/google" element={<SetupGoogle />} />
         <Route path="/setup/family" element={<SetupFamilyPlaceholder />} />
         <Route path="/" element={<Index />} />
         <Route path="*" element={<Index />} />
