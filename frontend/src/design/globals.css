@@ -1,0 +1,36 @@
+/* Body-level defaults — reads CSS vars exclusively */
+
+body {
+  font-family: var(--fontBody);
+  background: var(--bg);
+  color: var(--fg);
+  font-feature-settings: "ss01", "cv02";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Display type uses the serif */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--fontDisplay);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--fontMono);
+}

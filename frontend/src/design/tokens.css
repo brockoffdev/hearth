@@ -1,0 +1,59 @@
+/* Hearth design tokens — Ember aesthetic, three themes */
+
+:root {
+  /* Type */
+  --fontDisplay: "Fraunces", "Source Serif Pro", Georgia, serif;
+  --fontBody:    "Inter", -apple-system, system-ui, sans-serif;
+  --fontMono:    "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+
+  /* Geometry */
+  --radius:   14px;
+  --radiusLg: 22px;
+
+  /* Ember palette — semantic */
+  --paper:      #F7F1E8;
+  --paperDeep:  #EFE6D6;
+  --ink:        #1F1B16;
+  --inkSoft:    #5C5246;
+  --rule:       #E2D6BF;
+  --accent:     #B0431F;
+  --accentSoft: #E8D2C4;
+  --success:    #3F7A4A;
+  --warn:       #C97A1B;
+  --danger:     #A6342B;
+
+  /* Family ink (functional — used by VLM attribution and UI chips) */
+  --family-bryant:   #2E5BA8;
+  --family-danielle: #C0392B;
+  --family-isabella: #7B4FB8;
+  --family-eliana:   #E17AA1;
+  --family-family:   #D97A2C;
+
+  /* Theme defaults — Light */
+  --bg:           var(--paper);
+  --bgDeep:       var(--paperDeep);
+  --fg:           var(--ink);
+  --fgSoft:       var(--inkSoft);
+  --surface:      #FFFFFF;
+  --surfaceMuted: var(--paperDeep);
+}
+
+[data-theme="dark"] {
+  --bg:           #181513;
+  --bgDeep:       #0F0D0B;
+  --fg:           #F4EEE3;
+  --fgSoft:       #A89E8E;
+  --surface:      #22201D;
+  --surfaceMuted: #15130F;
+  --rule:         #2C2925;
+}
+
+[data-theme="sepia"] {
+  --bg:           #E9DBC2;
+  --bgDeep:       #D8C8AB;
+  --fg:           #3A2E1F;
+  --fgSoft:       #705A3F;
+  --surface:      #F1E5CF;
+  --surfaceMuted: #DCCEB4;
+  --rule:         #C4B190;
+}
