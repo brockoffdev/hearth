@@ -5,6 +5,8 @@ Routes:
   POST /api/google/oauth/init         — generate and return the Google consent URL
   GET  /api/google/oauth/callback     — Google redirects here after consent
   GET  /api/google/oauth/state        — query the current OAuth connection status
+  GET  /api/google/calendars          — list calendars from the connected Google account
+  POST /api/google/calendars          — create a new Google calendar
 """
 
 from __future__ import annotations
@@ -25,7 +27,12 @@ from backend.app.auth.dependencies import require_admin
 from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import FamilyMember, OauthToken, Setting
-from backend.app.google.calendar_client import _expiry_to_datetime, credentials_for
+from backend.app.google.calendar_client import (
+    _expiry_to_datetime,
+    create_calendar,
+    credentials_for,
+    list_calendars,
+)
 from backend.app.google.oauth_client import build_flow, fetch_token, get_authorization_url
 
 logger = logging.getLogger(__name__)
@@ -57,6 +64,19 @@ class OauthStateResponse(BaseModel):
     calendars_mapped: bool
     refresh_token_present: bool
     scopes: list[str] | None
+
+
+class GoogleCalendarResponse(BaseModel):
+    id: str
+    summary: str
+    primary: bool | None = None
+    access_role: str | None = None
+
+
+class CreateCalendarRequest(BaseModel):
+    summary: str
+
+    model_config = {"str_min_length": 1}
 
 
 # ---------------------------------------------------------------------------
@@ -293,4 +313,38 @@ async def oauth_state(
         calendars_mapped=calendars_mapped,
         refresh_token_present=connected,
         scopes=scopes,
+    )
+
+
+@router.get("/calendars", response_model=list[GoogleCalendarResponse])
+async def list_google_calendars(
+    db: AsyncSession = Depends(get_db),
+    _admin: object = Depends(require_admin),
+) -> list[GoogleCalendarResponse]:
+    """List all calendars accessible by the connected Google account."""
+    creds = await get_active_credentials(db)
+    calendars = await list_calendars(creds)
+    return [
+        GoogleCalendarResponse(
+            id=c["id"],
+            summary=c["summary"],
+            primary=c.get("primary"),
+            access_role=c.get("accessRole"),
+        )
+        for c in calendars
+    ]
+
+
+@router.post("/calendars", response_model=GoogleCalendarResponse)
+async def create_google_calendar(
+    body: CreateCalendarRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: object = Depends(require_admin),
+) -> GoogleCalendarResponse:
+    """Create a new Google Calendar on the connected account."""
+    creds = await get_active_credentials(db)
+    result = await create_calendar(creds, body.summary)
+    return GoogleCalendarResponse(
+        id=result["id"],
+        summary=result["summary"],
     )
