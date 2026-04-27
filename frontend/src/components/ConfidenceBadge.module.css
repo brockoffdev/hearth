@@ -1,0 +1,35 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--fontMono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+/* Status variants */
+.status-auto {
+  color: var(--success);
+  background: color-mix(in oklab, var(--success) 14%, transparent);
+}
+
+.status-review {
+  color: var(--warn);
+  background: color-mix(in oklab, var(--warn) 14%, transparent);
+}
+
+.status-skipped {
+  color: var(--inkSoft);
+  background: color-mix(in oklab, var(--inkSoft) 12%, transparent);
+}
+
+.glyph {
+  /* glyph inherits color from parent */
+}
+
+.value {
+  /* value inherits color from parent */
+}
