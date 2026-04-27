@@ -3,7 +3,6 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,10 +31,7 @@ def create_app() -> FastAPI:
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",  # Vite dev server
-            "http://localhost:8080",  # Production
-        ],
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -43,8 +39,7 @@ def create_app() -> FastAPI:
 
     application.include_router(api_router, prefix="/api")
 
-    dist_dir = Path(settings.frontend_dist_dir)
-    mount_frontend(application, dist_dir)
+    mount_frontend(application, settings.frontend_dist_dir)
 
     return application
 

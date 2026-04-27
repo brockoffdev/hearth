@@ -1,6 +1,7 @@
 """Application settings loaded from environment variables."""
 
 import functools
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,8 +10,12 @@ class Settings(BaseSettings):
     app_name: str = "hearth"
     version: str = "0.1.0"
     debug: bool = False
-    data_dir: str = "/data"
-    frontend_dist_dir: str = "frontend/dist"
+    data_dir: Path = Path("/data")
+    frontend_dist_dir: Path = Path("frontend/dist")
+    cors_origins: list[str] = [
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:8080",  # Production / compose
+    ]
 
     model_config = SettingsConfigDict(env_prefix="HEARTH_")
 
