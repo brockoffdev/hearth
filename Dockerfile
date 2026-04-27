@@ -32,8 +32,9 @@ WORKDIR /app
 # Copy virtual environment from builder
 COPY --from=backend-builder /build/.venv /app/.venv
 
-# Copy application source
+# Copy application source and Alembic migrations
 COPY backend/ ./backend/
+COPY alembic.ini ./
 
 # Copy built frontend from frontend-builder
 COPY --from=frontend-builder /app/dist ./frontend/dist/
@@ -41,10 +42,10 @@ COPY --from=frontend-builder /app/dist ./frontend/dist/
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
-# Non-root user for security
-RUN useradd -r -u 1001 hearth && chown -R hearth:hearth /app
+# Create the data directory for the SQLite volume mount and non-root user.
+RUN mkdir -p /data && useradd -r -u 1001 hearth && chown -R hearth:hearth /app /data
 USER hearth
 
 EXPOSE 8080
 
-CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
