@@ -66,9 +66,12 @@ The backend reads `HEARTH_*` environment variables. See `backend/app/config.py` 
 ```
 backend/             FastAPI app (Python 3.12, uv-managed)
 frontend/            Vite + React 18 + TypeScript
+tests/backend/       pytest suite for the backend
 docs/spec.md         The project spec (read this before contributing)
 design_handoff_hearth/   Design references (don't ship; lift tokens only)
+pyproject.toml       Python project + tool config (ruff, mypy, pytest)
 docker-compose.yml   Single-host deploy (Ollama VLM sidecar wired in for Phase 5)
+.github/workflows/   CI (backend + frontend + docker smoke test)
 ```
 
 ## Roadmap
@@ -85,6 +88,8 @@ Phase 1 (scaffold + design system) is in flight on this branch. Phases 2–10 fo
 8. Desktop calendar (editorial month) + Admin (family ↔ ink ↔ calendar mapping; provider/threshold settings)
 9. TV mode (LAN-only, editorial layout)
 10. States & polish (empty states, token-expired banner, theme toggle, dark/sepia)
+
+> Note: this is a 10-phase rollup of [docs/spec.md §11](docs/spec.md), which lists 12 finer-grained phases. The shape is the same; the rollup matches how the implementation milestones are actually delivered.
 
 See [docs/spec.md](docs/spec.md) for the detailed phase scope.
 
