@@ -1,0 +1,23 @@
+services:
+  hearth:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      HEARTH_DEBUG: "false"
+    volumes:
+      - hearth-data:/data
+    # depends_on:
+    #   - ollama  # uncomment in Phase 5 when VLM is wired
+
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   # for AMD ROCm: add devices: ['/dev/kfd', '/dev/dri'] and group_add per Ollama AMD docs
+
+volumes:
+  hearth-data:
+  # ollama-data:
