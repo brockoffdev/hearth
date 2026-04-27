@@ -15,6 +15,9 @@ The skeleton runs but has no business logic yet (no upload, no VLM pipeline, no 
 ### Run via Docker (recommended)
 
 ```bash
+# Generate and export a session secret first (required):
+export HEARTH_SESSION_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+
 docker compose up --build
 # open http://localhost:8080/
 ```
@@ -59,7 +62,17 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 
 ## Configuration
 
-The backend reads `HEARTH_*` environment variables. See `backend/app/config.py` for defaults and the available keys (debug, data_dir, frontend_dist_dir, cors_origins). Override via env at runtime, e.g. `HEARTH_CORS_ORIGINS='["https://hearth.example.com"]'`.
+The backend reads `HEARTH_*` environment variables. See `backend/app/config.py` for defaults and the available keys (debug, data_dir, frontend_dist_dir, cors_origins, session_cookie_secure). Override via env at runtime, e.g. `HEARTH_CORS_ORIGINS='["https://hearth.example.com"]'`.
+
+**Required:** `HEARTH_SESSION_SECRET` — a long random string used to sign session cookies. The application will refuse to start if this is not set. Generate one with:
+
+```bash
+export HEARTH_SESSION_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+```
+
+For production, provide this via a `.env` file, Docker secrets, or your deployment platform's secret store. Rotate periodically. Never commit a real value to the repository.
+
+Set `HEARTH_SESSION_COOKIE_SECURE=true` in production (HTTPS). Default is `false` to allow HTTP in local development.
 
 ## Project layout
 

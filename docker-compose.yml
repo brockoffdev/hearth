@@ -8,6 +8,12 @@ services:
       # Use the /data volume mount for the SQLite file in production.
       # Four slashes = sqlite:// + absolute path /data/hearth.db
       HEARTH_DATABASE_URL: "sqlite+aiosqlite:////data/hearth.db"
+      # Required: set HEARTH_SESSION_SECRET in your shell or a .env file before
+      # running `docker compose up`.  Generate a value with:
+      #   python -c "import secrets; print(secrets.token_urlsafe(32))"
+      # For production, use Docker secrets or your deployment platform's secret
+      # store.  Do NOT hardcode a value here.
+      HEARTH_SESSION_SECRET: ${HEARTH_SESSION_SECRET:?HEARTH_SESSION_SECRET must be set — see README}
     volumes:
       - hearth-data:/data
     # depends_on:
