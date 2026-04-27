@@ -1,5 +1,6 @@
 import { useTheme } from '../design/ThemeProvider';
 import type { Theme } from '../design/ThemeProvider';
+import { HearthWordmark } from '../components/HearthWordmark';
 import styles from './Index.module.css';
 
 const THEME_LABELS: Record<Theme, string> = {
@@ -13,25 +14,7 @@ export function Index() {
 
   return (
     <main className={styles.page}>
-      {/* Placeholder wordmark — Task C will replace with <HearthWordmark /> primitive */}
-      <svg
-        className={styles.wordmark}
-        viewBox="0 0 200 48"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-label="Hearth"
-        role="img"
-      >
-        <text
-          x="0"
-          y="40"
-          fontFamily="var(--fontDisplay)"
-          fontSize="40"
-          fontWeight="600"
-          fill="var(--fg)"
-        >
-          Hearth
-        </text>
-      </svg>
+      <HearthWordmark size={28} />
 
       <p className={styles.status}>Phase 1 scaffold ✓</p>
 

@@ -10,11 +10,6 @@
   color: var(--fg);
 }
 
-.wordmark {
-  width: 200px;
-  height: 48px;
-}
-
 .status {
   font-family: var(--fontBody);
   font-size: 1rem;
