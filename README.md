@@ -64,6 +64,8 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 
 The backend reads `HEARTH_*` environment variables. See `backend/app/config.py` for defaults and the available keys (debug, data_dir, frontend_dist_dir, cors_origins, session_cookie_secure). Override via env at runtime, e.g. `HEARTH_CORS_ORIGINS='["https://hearth.example.com"]'`.
 
+For Google Calendar integration: see [docs/google-oauth-setup.md](docs/google-oauth-setup.md) for one-time GCP project + OAuth client setup (~10 min, only the admin needs to do this).
+
 **Required:** `HEARTH_SESSION_SECRET` — a long random string used to sign session cookies. The application will refuse to start if this is not set. Generate one with:
 
 ```bash
