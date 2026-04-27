@@ -71,6 +71,9 @@ export function SetupFamily() {
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
 
+  // Calendar load error state
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // On mount: fetch family members and calendars in parallel.
   useEffect(() => {
     let cancelled = false;
@@ -89,9 +92,18 @@ export function SetupFamily() {
         if (calendarsRes.ok) {
           const data = (await calendarsRes.json()) as GoogleCalendarData[];
           setCalendars(data);
+          setLoadError(null);
+        } else {
+          setLoadError(
+            "Couldn't load your Google calendars. Use 'Create new' to add one — we'll create it on Google Calendar for you.",
+          );
         }
       } catch {
-        // Non-fatal — degraded state shows empty dropdowns.
+        if (!cancelled) {
+          setLoadError(
+            "Couldn't load your Google calendars. Use 'Create new' to add one — we'll create it on Google Calendar for you.",
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -230,6 +242,19 @@ export function SetupFamily() {
             <strong>{mappedCount} of 5</strong> mapped
           </p>
 
+          {loadError !== null && (
+            <div className={styles.errorBanner} role="alert">
+              {loadError}
+            </div>
+          )}
+
+          {!loading && loadError === null && calendars.length === 0 && (
+            <div className={styles.infoBanner} role="status">
+              Your Google account has no calendars yet. Use &lsquo;Create new&rsquo; on each row
+              to add the family&rsquo;s calendars.
+            </div>
+          )}
+
           <div className={styles.tableCard}>
             <div className={styles.tableHeader}>
               <span>Member</span>
@@ -244,24 +269,16 @@ export function SetupFamily() {
             ) : (
               members.map((member) => {
                 const isCreateOpen = openCreateForId === member.id;
-                const defaultName = createName[member.id] ?? member.name;
 
                 return (
                   <div key={member.id} className={styles.tableRow}>
                     {/* Member name cell — colored dot + name */}
                     <div className={styles.memberCell}>
                       <span
-                        style={{
-                          display: 'inline-block',
-                          width: 14,
-                          height: 14,
-                          borderRadius: '50%',
-                          background: member.color_hex_center,
-                          marginRight: 10,
-                          flexShrink: 0,
-                        }}
+                        className={styles.familyDot}
+                        style={{ background: member.color_hex_center }}
                       />
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{member.name}</span>
+                      <span className={styles.familyName}>{member.name}</span>
                     </div>
 
                     {/* Calendar cell — dropdown + optional create form */}
@@ -276,9 +293,7 @@ export function SetupFamily() {
                           }}
                           aria-label={`Calendar for ${member.name}`}
                         >
-                          <option value="">
-                            {loading ? 'Loading calendars…' : '— select a calendar —'}
-                          </option>
+                          <option value="">— select a calendar —</option>
                           {calendars.map((cal) => (
                             <option key={cal.id} value={cal.id}>
                               {cal.summary}
@@ -304,7 +319,7 @@ export function SetupFamily() {
                           <button
                             className={styles.createBtn}
                             type="button"
-                            disabled={creating || !(createName[member.id] ?? defaultName).trim()}
+                            disabled={creating || !(createName[member.id] ?? member.name).trim()}
                             onClick={() => void handleCreateCalendar(member.id)}
                           >
                             Create

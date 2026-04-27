@@ -99,6 +99,20 @@
   align-items: center;
 }
 
+.familyDot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.familyName {
+  font-weight: 600;
+  font-size: 14px;
+}
+
 .calendarCell {
   display: flex;
   flex-direction: column;
@@ -200,6 +214,18 @@
   background: var(--danger-bg, #fff5f5);
   border: 1px solid var(--danger, #e53e3e);
   color: var(--danger, #e53e3e);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Info banner (empty-state) */
+.infoBanner {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--info-bg, #ebf8ff);
+  border: 1px solid var(--info, #3182ce);
+  color: var(--info, #3182ce);
   font-size: 13px;
   font-weight: 500;
 }

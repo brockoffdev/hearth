@@ -73,8 +73,8 @@ async def test_alembic_upgrade_downgrade_roundtrip(
             assert names == [
                 "Bryant",
                 "Danielle",
-                "Isabella",
-                "Eliana",
+                "Izzy",
+                "Ellie",
                 "Family",
             ], f"Unexpected family member names/order: {names}"
 

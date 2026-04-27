@@ -86,8 +86,8 @@ async def test_list_family_members_returns_seeded_5(
         names = [m["name"] for m in body]
         assert "Bryant" in names
         assert "Danielle" in names
-        assert "Isabella" in names
-        assert "Eliana" in names
+        assert "Izzy" in names
+        assert "Ellie" in names
         assert "Family" in names
 
         # Verify color hex fields are present and non-empty.
