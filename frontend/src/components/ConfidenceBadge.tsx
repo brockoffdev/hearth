@@ -6,6 +6,7 @@
  * Per design README: "Confidence is a gate, not a label. Don't show % on
  * auto-published items." — that gating is enforced at the consumer level, not here.
  */
+import { cn } from '../lib/cn';
 import styles from './ConfidenceBadge.module.css';
 
 type BadgeStatus = 'auto' | 'review' | 'skipped';
@@ -22,15 +23,21 @@ const STATUS_GLYPH: Record<BadgeStatus, string> = {
   skipped: '–',
 };
 
+const STATUS_CLASS: Record<BadgeStatus, string> = {
+  auto: styles['status-auto']!,
+  review: styles['status-review']!,
+  skipped: styles['status-skipped']!,
+};
+
 export function ConfidenceBadge({ value, status, className }: ConfidenceBadgeProps) {
   const pct = Math.round(value * 100);
 
   return (
     <span
-      className={[styles.badge, styles[`status-${status}`], className].filter(Boolean).join(' ')}
+      className={cn(styles.badge, STATUS_CLASS[status], className)}
       data-status={status}
     >
-      <span className={styles.glyph}>{STATUS_GLYPH[status]}</span>
+      <span className={styles.glyph} aria-hidden="true">{STATUS_GLYPH[status]}</span>
       <span className={styles.value}>{pct}%</span>
     </span>
   );

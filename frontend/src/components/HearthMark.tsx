@@ -1,3 +1,4 @@
+import { cn } from '../lib/cn';
 import styles from './HearthMark.module.css';
 
 interface HearthMarkProps {
@@ -18,7 +19,7 @@ export function HearthMark({ size = 22, className, ariaLabel }: HearthMarkProps)
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={[styles.mark, className].filter(Boolean).join(' ')}
+      className={cn(styles.mark, className)}
       {...accessibilityProps}
     >
       {/* Hearth arch */}

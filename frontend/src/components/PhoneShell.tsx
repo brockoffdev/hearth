@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '../lib/cn';
 import styles from './PhoneShell.module.css';
 
 interface PhoneShellProps {
@@ -8,7 +9,7 @@ interface PhoneShellProps {
 
 export function PhoneShell({ children, className }: PhoneShellProps) {
   return (
-    <div className={[styles.phoneShell, className].filter(Boolean).join(' ')}>
+    <div className={cn(styles.phoneShell, className)}>
       {children}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useTheme } from '../design/ThemeProvider';
-import type { Theme } from '../design/ThemeProvider';
+import { THEME_LABELS } from '../design/themeLabels';
+import { cn } from '../lib/cn';
 import { HearthMark } from '../components/HearthMark';
 import { HearthWordmark } from '../components/HearthWordmark';
 import { HBtn } from '../components/HBtn';
@@ -9,12 +10,6 @@ import { PhoneShell } from '../components/PhoneShell';
 import { DesktopShell } from '../components/DesktopShell';
 import type { FamilyMemberId } from '../lib/family';
 import styles from './DesignSmoke.module.css';
-
-const THEME_LABELS: Record<Theme, string> = {
-  light: 'Light',
-  dark: 'Dark',
-  sepia: 'Sepia',
-};
 
 const FAMILY_MEMBERS: FamilyMemberId[] = ['bryant', 'danielle', 'isabella', 'eliana', 'family'];
 
@@ -73,7 +68,7 @@ export function DesignSmoke() {
             ))
           )}
         </div>
-        <div className={[styles.row, styles.rowSpacedTop].join(' ')}>
+        <div className={cn(styles.row, styles.rowSpacedTop)}>
           {(['primary', 'ghost', 'default', 'danger'] as const).map((kind) => (
             <HBtn key={`${kind}-disabled`} kind={kind} disabled>
               {kind} disabled
@@ -92,7 +87,7 @@ export function DesignSmoke() {
             ))
           )}
         </div>
-        <div className={[styles.row, styles.rowSpacedTop].join(' ')}>
+        <div className={cn(styles.row, styles.rowSpacedTop)}>
           <span className={styles.swatchLabel}>No label:</span>
           {FAMILY_MEMBERS.map((id) => (
             <FamilyChip key={`${id}-nolabel`} who={id} showLabel={false} />

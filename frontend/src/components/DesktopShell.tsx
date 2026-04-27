@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
+import { cn } from '../lib/cn';
 import styles from './DesktopShell.module.css';
 
 interface DesktopShellProps {
@@ -17,7 +18,7 @@ export function DesktopShell({
 }: DesktopShellProps) {
   return (
     <div
-      className={[styles.desktopShell, className].filter(Boolean).join(' ')}
+      className={cn(styles.desktopShell, className)}
       style={{
         '--desktop-width': `${width}px`,
         '--desktop-height': `${height}px`,

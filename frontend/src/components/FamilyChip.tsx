@@ -1,5 +1,6 @@
 import type { FamilyMemberId } from '../lib/family';
 import { HEARTH_FAMILY } from '../lib/family';
+import { cn } from '../lib/cn';
 import styles from './FamilyChip.module.css';
 
 type ChipSize = 'sm' | 'md' | 'lg';
@@ -11,9 +12,11 @@ interface FamilyChipProps {
   className?: string;
 }
 
-function cn(...classes: (string | undefined | false | null)[]): string {
-  return classes.filter(Boolean).join(' ');
-}
+const SIZE_CLASS: Record<ChipSize, string> = {
+  sm: styles['size-sm']!,
+  md: styles['size-md']!,
+  lg: styles['size-lg']!,
+};
 
 export function FamilyChip({
   who,
@@ -27,7 +30,7 @@ export function FamilyChip({
     console.warn(`FamilyChip: unknown family member id "${who}"`);
     // Render a neutral fallback chip
     return (
-      <span className={cn(styles.chip, styles[`size-${size}`], className)}>
+      <span className={cn(styles.chip, SIZE_CLASS[size], className)}>
         <span className={styles.dot} />
         {showLabel && <span className={styles.label}>Unknown</span>}
       </span>
@@ -35,7 +38,7 @@ export function FamilyChip({
   }
 
   return (
-    <span className={cn(styles.chip, styles[`size-${size}`], className)}>
+    <span className={cn(styles.chip, SIZE_CLASS[size], className)}>
       <span
         className={styles.dot}
         data-who={member.id}

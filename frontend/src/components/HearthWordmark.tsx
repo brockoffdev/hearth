@@ -1,5 +1,6 @@
 import type React from 'react';
 import { HearthMark } from './HearthMark';
+import { cn } from '../lib/cn';
 import styles from './HearthWordmark.module.css';
 
 interface HearthWordmarkProps {
@@ -12,7 +13,7 @@ export function HearthWordmark({ size = 18, className }: HearthWordmarkProps) {
 
   return (
     <span
-      className={[styles.wordmark, className].filter(Boolean).join(' ')}
+      className={cn(styles.wordmark, className)}
       style={{ '--wordmark-size': `${markSize}px` } as React.CSSProperties}
     >
       <HearthMark size={markSize} />

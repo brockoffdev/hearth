@@ -1,13 +1,7 @@
 import { useTheme } from '../design/ThemeProvider';
-import type { Theme } from '../design/ThemeProvider';
+import { THEME_LABELS } from '../design/themeLabels';
 import { HearthWordmark } from '../components/HearthWordmark';
 import styles from './Index.module.css';
-
-const THEME_LABELS: Record<Theme, string> = {
-  light: 'Light',
-  dark: 'Dark',
-  sepia: 'Sepia',
-};
 
 export function Index() {
   const { theme, cycleTheme } = useTheme();

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { cn } from '../lib/cn';
 import styles from './HBtn.module.css';
 
 type HBtnKind = 'primary' | 'ghost' | 'default' | 'danger';
@@ -12,9 +13,18 @@ interface HBtnProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'
   className?: string;
 }
 
-function cn(...classes: (string | undefined | false | null)[]): string {
-  return classes.filter(Boolean).join(' ');
-}
+const KIND_CLASS: Record<HBtnKind, string> = {
+  primary: styles['kind-primary']!,
+  ghost:   styles['kind-ghost']!,
+  default: styles['kind-default']!,
+  danger:  styles['kind-danger']!,
+};
+
+const SIZE_CLASS: Record<HBtnSize, string> = {
+  sm: styles['size-sm']!,
+  md: styles['size-md']!,
+  lg: styles['size-lg']!,
+};
 
 export function HBtn({
   kind = 'default',
@@ -31,8 +41,8 @@ export function HBtn({
       disabled={disabled}
       className={cn(
         styles.btn,
-        styles[`kind-${kind}`],
-        styles[`size-${size}`],
+        KIND_CLASS[kind],
+        SIZE_CLASS[size],
         disabled && styles.disabled,
         className,
       )}

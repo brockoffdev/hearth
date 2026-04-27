@@ -23,6 +23,12 @@ describe('ConfidenceBadge', () => {
     expect(screen.getByText(/✓/)).not.toBeNull();
   });
 
+  it('glyph span has aria-hidden="true" so screen readers skip it', () => {
+    render(<ConfidenceBadge value={0.95} status="auto" />);
+    const glyph = screen.getByText('✓').closest('span');
+    expect(glyph?.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('renders ! glyph for status="review"', () => {
     render(<ConfidenceBadge value={0.61} status="review" />);
     expect(screen.getByText(/!/)).not.toBeNull();
