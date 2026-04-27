@@ -101,6 +101,14 @@
   max-width: 900px;
 }
 
+/* WizardSteps showcase rows */
+.wizardStepsRow {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
 /* Shell thumbnails — scale down to avoid giant boxes */
 .shellRow {
   display: flex;

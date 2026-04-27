@@ -10,6 +10,8 @@ import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { PhoneShell } from '../components/PhoneShell';
 import { DesktopShell } from '../components/DesktopShell';
 import { Input } from '../components/Input';
+import { WizardSteps } from '../components/WizardSteps';
+import type { WizardStep } from '../components/WizardSteps';
 import type { FamilyMemberId } from '../lib/family';
 import styles from './DesignSmoke.module.css';
 
@@ -173,6 +175,86 @@ export function DesignSmoke() {
             placeholder="user@example.com"
           />
         </div>
+      </section>
+
+      {/* WizardSteps section */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>WizardSteps</h2>
+
+        {/* State 1: All upcoming (not yet started) */}
+        {(() => {
+          const steps: readonly WizardStep[] = [
+            { key: 'account', label: 'Account', status: 'upcoming' },
+            { key: 'google',  label: 'Google',  status: 'upcoming' },
+            { key: 'family',  label: 'Family',  status: 'upcoming' },
+          ];
+          return (
+            <div className={styles.wizardStepsRow}>
+              <span className={styles.swatchLabel}>All upcoming:</span>
+              <WizardSteps steps={steps} />
+            </div>
+          );
+        })()}
+
+        {/* State 2: Step 1 active (Account in progress) */}
+        {(() => {
+          const steps: readonly WizardStep[] = [
+            { key: 'account', label: 'Account', status: 'active' },
+            { key: 'google',  label: 'Google',  status: 'upcoming' },
+            { key: 'family',  label: 'Family',  status: 'upcoming' },
+          ];
+          return (
+            <div className={styles.wizardStepsRow}>
+              <span className={styles.swatchLabel}>Step 1 active:</span>
+              <WizardSteps steps={steps} />
+            </div>
+          );
+        })()}
+
+        {/* State 3: Step 2 active (Account done, Google in progress) */}
+        {(() => {
+          const steps: readonly WizardStep[] = [
+            { key: 'account', label: 'Account', status: 'done' },
+            { key: 'google',  label: 'Google',  status: 'active' },
+            { key: 'family',  label: 'Family',  status: 'upcoming' },
+          ];
+          return (
+            <div className={styles.wizardStepsRow}>
+              <span className={styles.swatchLabel}>Step 2 active:</span>
+              <WizardSteps steps={steps} />
+            </div>
+          );
+        })()}
+
+        {/* State 4: Step 3 active (Account + Google done, Family in progress) */}
+        {(() => {
+          const steps: readonly WizardStep[] = [
+            { key: 'account', label: 'Account', status: 'done' },
+            { key: 'google',  label: 'Google',  status: 'done' },
+            { key: 'family',  label: 'Family',  status: 'active' },
+          ];
+          return (
+            <div className={styles.wizardStepsRow}>
+              <span className={styles.swatchLabel}>Step 3 active:</span>
+              <WizardSteps steps={steps} />
+            </div>
+          );
+        })()}
+
+        {/* State 5: All done */}
+        {(() => {
+          const steps: readonly WizardStep[] = [
+            { key: 'account', label: 'Account', status: 'done' },
+            { key: 'google',  label: 'Google',  status: 'done' },
+            { key: 'family',  label: 'Family',  status: 'done' },
+          ];
+          return (
+            <div className={styles.wizardStepsRow}>
+              <span className={styles.swatchLabel}>All done:</span>
+              <WizardSteps steps={steps} />
+            </div>
+          );
+        })()}
       </section>
 
       {/* Shell section */}
