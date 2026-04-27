@@ -11,7 +11,6 @@
  */
 export function SetupGooglePlaceholder() {
   return (
-    // eslint-disable-next-line react/forbid-dom-props
     <div style={{ padding: 40 }}>
       <h1>Wizard Step 2 — Coming in Phase 2 Task E</h1>
       <p>Google OAuth onboarding will live here.</p>
