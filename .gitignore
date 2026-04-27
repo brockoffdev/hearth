@@ -1,5 +1,6 @@
 # Per-session Engram agent state — assigned per checkout, not portable
 .claude/
+.worktrees/
 
 # Python
 __pycache__/
