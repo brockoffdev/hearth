@@ -1,0 +1,77 @@
+/* WizardSteps — breadcrumb row showing wizard progress */
+
+.root {
+  display: flex;
+  align-items: center;
+  gap: 0; /* connectors and steps sit directly adjacent */
+}
+
+/* Connecting line between steps */
+.connector {
+  width: 24px;
+  height: 1px;
+  background: var(--rule);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+/* Step wrapper */
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Badge circle */
+.badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Step label */
+.label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ---- Status variants via data-status attribute ---- */
+
+.step[data-status="done"] .badge {
+  background: var(--success);
+  color: #fff;
+  border: none;
+}
+
+.step[data-status="done"] .label {
+  color: var(--fgSoft);
+  font-weight: 500;
+}
+
+.step[data-status="active"] .badge {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+}
+
+.step[data-status="active"] .label {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.step[data-status="upcoming"] .badge {
+  background: var(--surface);
+  color: var(--fgSoft);
+  border: 1px solid var(--rule);
+}
+
+.step[data-status="upcoming"] .label {
+  color: var(--fgSoft);
+  font-weight: 500;
+}
