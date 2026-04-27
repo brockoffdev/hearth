@@ -35,6 +35,9 @@ exclude = ["*.ini", "*.mako"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "W", "RUF"]
+# B008: FastAPI uses Depends() in function argument defaults — this is the
+# canonical pattern recommended by FastAPI docs; suppressing globally here.
+ignore = ["B008"]
 
 [tool.mypy]
 strict = true

@@ -33,7 +33,7 @@ def spa_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[FastAP
     original_get_settings = cfg_module.get_settings
     original_get_settings.cache_clear()
 
-    patched = lambda: Settings(frontend_dist_dir=dist)  # noqa: E731
+    patched = lambda: Settings(frontend_dist_dir=dist)  # type: ignore[call-arg]  # noqa: E731
 
     # Patch in both the config module and main module (which imported it directly).
     monkeypatch.setattr(cfg_module, "get_settings", patched)

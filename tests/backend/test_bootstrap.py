@@ -1,6 +1,5 @@
 """Tests for the bootstrap admin user creation."""
 
-import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 

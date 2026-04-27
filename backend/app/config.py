@@ -55,4 +55,6 @@ class Settings(BaseSettings):
 
 @functools.lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    # session_secret has no default; pydantic-settings loads it from
+    # HEARTH_SESSION_SECRET at runtime.  mypy cannot model this pattern.
+    return Settings()  # type: ignore[call-arg]

@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import functools
 import logging
-from typing import Any
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -48,7 +48,7 @@ def create_session_cookie(
     setting the cookie name separately via ``settings.session_cookie_name``.
     """
     serializer = _get_serializer(settings.session_secret)
-    issued_at = datetime.now(tz=timezone.utc)
+    issued_at = datetime.now(tz=UTC)
     value = serializer.dumps(
         {"user_id": user_id, "issued_at": issued_at.isoformat()}
     )
