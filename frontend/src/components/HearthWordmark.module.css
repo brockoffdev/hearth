@@ -1,0 +1,15 @@
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  /* font-size is set via inline style (derived from size prop) */
+}
+
+.text {
+  font-family: var(--fontDisplay);
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  /* font-size inherits from .wordmark which sets it via inline style */
+  font-size: 1em;
+}

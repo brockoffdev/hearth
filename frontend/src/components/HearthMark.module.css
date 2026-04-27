@@ -1,0 +1,5 @@
+/* HearthMark: sizing is driven by the size prop; color via currentColor. */
+.mark {
+  display: inline-block;
+  flex-shrink: 0;
+}
