@@ -4,7 +4,7 @@ import { DesignSmoke } from './routes/DesignSmoke';
 import { Login } from './routes/Login';
 import { Setup } from './routes/Setup';
 import { SetupGoogle } from './routes/SetupGoogle';
-import { SetupFamilyPlaceholder } from './routes/SetupFamilyPlaceholder';
+import { SetupFamily } from './routes/SetupFamily';
 import { RequireAuth } from './auth/RequireAuth';
 import { WizardGate } from './auth/WizardGate';
 
@@ -34,7 +34,7 @@ export function App() {
       >
         <Route path="/setup" element={<Setup />} />
         <Route path="/setup/google" element={<SetupGoogle />} />
-        <Route path="/setup/family" element={<SetupFamilyPlaceholder />} />
+        <Route path="/setup/family" element={<SetupFamily />} />
         <Route path="/" element={<Index />} />
         <Route path="*" element={<Index />} />
       </Route>
