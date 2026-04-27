@@ -5,6 +5,9 @@ services:
       - "8080:8080"
     environment:
       HEARTH_DEBUG: "false"
+      # Use the /data volume mount for the SQLite file in production.
+      # Four slashes = sqlite:// + absolute path /data/hearth.db
+      HEARTH_DATABASE_URL: "sqlite+aiosqlite:////data/hearth.db"
     volumes:
       - hearth-data:/data
     # depends_on:
