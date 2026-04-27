@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # The application will refuse to start if this is not set.
     session_secret: str
 
+    # Public base URL for the Hearth server, used to build OAuth redirect URIs.
+    # Override via HEARTH_PUBLIC_BASE_URL in production (e.g. https://hearth.example.com).
+    # Must NOT have a trailing slash.
+    public_base_url: str = "http://localhost:8080"
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
