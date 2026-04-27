@@ -1,27 +1,33 @@
-"""Upload API endpoints — Phase 3 Task A.
+"""Upload API endpoints — Phase 3 Task A + B.
 
 Routes:
   POST   /api/uploads               — accept a multipart photo upload
   GET    /api/uploads               — list current user's uploads (most recent first)
   GET    /api/uploads/{id}          — single upload metadata
   GET    /api/uploads/{id}/photo    — raw photo bytes
+  GET    /api/uploads/{id}/events   — SSE stream of pipeline stage events
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from collections.abc import AsyncGenerator
+from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sse_starlette.sse import EventSourceResponse
 
 from backend.app.auth.dependencies import require_user
 from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import Upload, User
+from backend.app.uploads.pipeline import run_fake_pipeline
 from backend.app.uploads.storage import read_photo, store_photo
 
 router = APIRouter()
@@ -148,6 +154,77 @@ async def get_upload_photo(
     ext = Path(upload.image_path).suffix.lower()
     media_type = _EXT_TO_MEDIA_TYPE.get(ext, "application/octet-stream")
     return Response(content=image_bytes, media_type=media_type)
+
+
+# ---------------------------------------------------------------------------
+# SSE endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{upload_id}/events")
+async def stream_upload_events(
+    upload_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    current_user: User = Depends(require_user),
+) -> EventSourceResponse:
+    """Stream SSE events for the upload's processing pipeline.
+
+    Emits ``stage_update`` named events.  Each event's data is a JSON object
+    with keys ``stage``, ``message``, and ``progress``.
+
+    If the upload is already completed or failed, a single ``done`` event is
+    emitted immediately and the connection closes.
+    """
+    upload = await _fetch_upload_or_404(upload_id, db)
+    _check_access(upload, current_user)
+
+    # Short-circuit if already terminal — don't re-run the pipeline.
+    if upload.status in ("completed", "failed"):
+        async def _already_done() -> AsyncGenerator[dict[str, str], None]:
+            payload = {"stage": "done", "message": "already-complete", "progress": None}
+            yield {"event": "stage_update", "data": json.dumps(payload)}
+
+        return EventSourceResponse(_already_done())
+
+    # Transition status to processing before emitting the first event so that
+    # GET /api/uploads/{id} reflects the in-flight state immediately.
+    upload.status = "processing"
+    await db.commit()
+    await db.refresh(upload)
+
+    async def _event_generator() -> AsyncGenerator[dict[str, str], None]:
+        saw_done = False
+        try:
+            pipeline = run_fake_pipeline(
+                upload_id,
+                stage_delay_seconds=settings.pipeline_stage_delay_seconds,
+                cell_delay_seconds=settings.pipeline_cell_delay_seconds,
+            )
+            async for stage_event in pipeline:
+                if await request.is_disconnected():
+                    # Client disconnected mid-stream — abort without updating DB.
+                    return
+
+                yield {
+                    "event": "stage_update",
+                    "data": json.dumps(asdict(stage_event)),
+                }
+
+                if stage_event.stage == "done":
+                    saw_done = True
+                    break
+
+        finally:
+            if saw_done and not await request.is_disconnected():
+                # Mark the upload as completed only if the pipeline ran to done.
+                upload.status = "completed"
+                upload.finished_at = datetime.now(tz=UTC)
+                upload.provider = "fake-pipeline-phase-3"
+                await db.commit()
+
+    return EventSourceResponse(_event_generator())
 
 
 # ---------------------------------------------------------------------------
