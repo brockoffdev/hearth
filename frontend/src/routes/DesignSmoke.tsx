@@ -73,7 +73,7 @@ export function DesignSmoke() {
             ))
           )}
         </div>
-        <div className={styles.row} style={{ marginTop: '1rem' }}>
+        <div className={[styles.row, styles.rowSpacedTop].join(' ')}>
           {(['primary', 'ghost', 'default', 'danger'] as const).map((kind) => (
             <HBtn key={`${kind}-disabled`} kind={kind} disabled>
               {kind} disabled
@@ -92,7 +92,7 @@ export function DesignSmoke() {
             ))
           )}
         </div>
-        <div className={styles.row} style={{ marginTop: '1rem' }}>
+        <div className={[styles.row, styles.rowSpacedTop].join(' ')}>
           <span className={styles.swatchLabel}>No label:</span>
           {FAMILY_MEMBERS.map((id) => (
             <FamilyChip key={`${id}-nolabel`} who={id} showLabel={false} />

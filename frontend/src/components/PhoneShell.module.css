@@ -1,11 +1,13 @@
 /* PhoneShell — simple artboard frame for mobile screen previews.
-   NOT a fake iOS device chrome — just a sized box with border + bg. */
+   NOT a fake iOS device chrome — just a sized box with border + bg.
+   Fixed at 390×844 (standard phone artboard). */
 .phoneShell {
+  width: 390px;
+  height: 844px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radiusLg);
   border: 1px solid var(--rule);
   background: var(--bg);
-  /* width/height are set via inline style (390×844) */
 }

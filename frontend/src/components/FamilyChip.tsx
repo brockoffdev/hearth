@@ -38,7 +38,7 @@ export function FamilyChip({
     <span className={cn(styles.chip, styles[`size-${size}`], className)}>
       <span
         className={styles.dot}
-        style={{ background: `var(--family-${member.id})` }}
+        data-who={member.id}
       />
       {showLabel && <span className={styles.label}>{member.name}</span>}
     </span>

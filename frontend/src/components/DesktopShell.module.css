@@ -1,10 +1,13 @@
-/* DesktopShell — simple artboard frame for desktop screen previews. */
+/* DesktopShell — simple artboard frame for desktop screen previews.
+   --desktop-width and --desktop-height are set via CSS custom property
+   from the width/height props (defaults 1280×800). */
 .desktopShell {
+  width: var(--desktop-width, 1280px);
+  height: var(--desktop-height, 800px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radiusLg);
   border: 1px solid var(--rule);
   background: var(--bg);
-  /* width/height are set via inline style */
 }

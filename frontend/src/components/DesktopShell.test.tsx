@@ -8,28 +8,28 @@ describe('DesktopShell', () => {
     expect(screen.getByText('desktop content')).not.toBeNull();
   });
 
-  it('applies default width of 1280', () => {
+  it('applies default --desktop-width of 1280px', () => {
     const { container } = render(<DesktopShell><span>content</span></DesktopShell>);
     const shell = container.firstElementChild as HTMLElement;
-    expect(shell.style.width).toBe('1280px');
+    expect(shell.style.getPropertyValue('--desktop-width')).toBe('1280px');
   });
 
-  it('applies default height of 800', () => {
+  it('applies default --desktop-height of 800px', () => {
     const { container } = render(<DesktopShell><span>content</span></DesktopShell>);
     const shell = container.firstElementChild as HTMLElement;
-    expect(shell.style.height).toBe('800px');
+    expect(shell.style.getPropertyValue('--desktop-height')).toBe('800px');
   });
 
   it('respects custom width prop', () => {
     const { container } = render(<DesktopShell width={1440}><span>content</span></DesktopShell>);
     const shell = container.firstElementChild as HTMLElement;
-    expect(shell.style.width).toBe('1440px');
+    expect(shell.style.getPropertyValue('--desktop-width')).toBe('1440px');
   });
 
   it('respects custom height prop', () => {
     const { container } = render(<DesktopShell height={900}><span>content</span></DesktopShell>);
     const shell = container.firstElementChild as HTMLElement;
-    expect(shell.style.height).toBe('900px');
+    expect(shell.style.getPropertyValue('--desktop-height')).toBe('900px');
   });
 
   it('forwards className', () => {

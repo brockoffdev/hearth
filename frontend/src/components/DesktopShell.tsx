@@ -1,3 +1,4 @@
+import type React from 'react';
 import type { ReactNode } from 'react';
 import styles from './DesktopShell.module.css';
 
@@ -17,7 +18,10 @@ export function DesktopShell({
   return (
     <div
       className={[styles.desktopShell, className].filter(Boolean).join(' ')}
-      style={{ width: `${width}px`, height: `${height}px` }}
+      style={{
+        '--desktop-width': `${width}px`,
+        '--desktop-height': `${height}px`,
+      } as React.CSSProperties}
     >
       {children}
     </div>

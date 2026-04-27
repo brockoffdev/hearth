@@ -60,6 +60,10 @@
   gap: 1rem;
 }
 
+.rowSpacedTop {
+  margin-top: 1rem;
+}
+
 .swatch {
   display: flex;
   flex-direction: column;

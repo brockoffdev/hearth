@@ -8,13 +8,11 @@ describe('PhoneShell', () => {
     expect(screen.getByText('phone content')).not.toBeNull();
   });
 
-  it('applies width of 390px via CSS variable or inline style', () => {
+  it('has the phoneShell CSS class (which applies 390x844 dimensions)', () => {
     const { container } = render(<PhoneShell><span>content</span></PhoneShell>);
     const shell = container.firstElementChild as HTMLElement;
-    // Check either inline style or data attribute indicating fixed dimensions
-    const style = shell.style;
-    const hasWidth = style.width === '390px' || shell.className.includes('phoneShell');
-    expect(hasWidth).toBe(true);
+    // Width/height are set in CSS (phoneShell class) — not inline style
+    expect(shell.className).toMatch(/phoneShell/);
   });
 
   it('applies shell class', () => {
