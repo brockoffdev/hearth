@@ -29,6 +29,7 @@ packages = ["backend"]
 
 [tool.ruff]
 line-length = 100
+exclude = ["*.ini", "*.mako"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "W", "RUF"]
