@@ -108,7 +108,7 @@ export function Login() {
             required
           />
           {formError && (
-            <p role="alert" aria-live="assertive" style={{ color: 'var(--danger)', fontSize: 13, margin: 0 }}>
+            <p role="alert" aria-live="assertive" className={styles.formError}>
               {formError}
             </p>
           )}

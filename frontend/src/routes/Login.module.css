@@ -90,6 +90,12 @@
   margin-top: 6px;
 }
 
+.formError {
+  font-size: 13px;
+  color: var(--danger);
+  margin: 0;
+}
+
 /* Hide left pane on narrow viewports */
 @media (max-width: 699px) {
   .page {
