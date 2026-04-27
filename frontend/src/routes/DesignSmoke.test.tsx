@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { ThemeProvider } from '../design/ThemeProvider';
 import { DesignSmoke } from './DesignSmoke';
 
+
 function renderSmoke() {
   return render(
     <MemoryRouter>
@@ -89,6 +90,23 @@ describe('DesignSmoke route', () => {
     expect(screen.getByText('HBtn')).not.toBeNull();
     expect(screen.getByText('FamilyChip')).not.toBeNull();
     expect(screen.getByText('ConfidenceBadge')).not.toBeNull();
+    expect(screen.getByText('Input')).not.toBeNull();
+  });
+
+  it('renders Input section with variant labels', () => {
+    renderSmoke();
+    expect(screen.getByText('Default (text)')).not.toBeNull();
+    expect(screen.getByText('With value')).not.toBeNull();
+    expect(screen.getByText('Disabled')).not.toBeNull();
+    expect(screen.getByText('With error')).not.toBeNull();
+    expect(screen.getByText(/Mono/)).not.toBeNull();
+    expect(screen.getByText('Password')).not.toBeNull();
+    expect(screen.getByText('Email')).not.toBeNull();
+  });
+
+  it('Input section shows error text for the error variant', () => {
+    renderSmoke();
+    expect(screen.getByText('This field is required')).not.toBeNull();
   });
 
   it('renders a theme cycle button', () => {

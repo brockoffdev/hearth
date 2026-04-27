@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTheme } from '../design/ThemeProvider';
 import { THEME_LABELS } from '../design/themeLabels';
 import { cn } from '../lib/cn';
@@ -8,6 +9,7 @@ import { FamilyChip } from '../components/FamilyChip';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { PhoneShell } from '../components/PhoneShell';
 import { DesktopShell } from '../components/DesktopShell';
+import { Input } from '../components/Input';
 import type { FamilyMemberId } from '../lib/family';
 import styles from './DesignSmoke.module.css';
 
@@ -15,6 +17,8 @@ const FAMILY_MEMBERS: FamilyMemberId[] = ['bryant', 'danielle', 'isabella', 'eli
 
 export function DesignSmoke() {
   const { theme, cycleTheme } = useTheme();
+  const [inputValue, setInputValue] = useState('');
+  const [pwValue, setPwValue] = useState('');
 
   return (
     <div className={styles.page}>
@@ -104,6 +108,70 @@ export function DesignSmoke() {
           <ConfidenceBadge value={0.95} status="auto" />
           <ConfidenceBadge value={1.0} status="auto" />
           <ConfidenceBadge value={0.45} status="skipped" />
+        </div>
+      </section>
+
+      {/* Input section */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Input</h2>
+        <div className={styles.inputGrid}>
+          {/* Default text */}
+          <Input
+            label="Default (text)"
+            value={inputValue}
+            onChange={setInputValue}
+            placeholder="Type something…"
+          />
+          {/* With value */}
+          <Input
+            label="With value"
+            value="bryant"
+            onChange={() => {}}
+          />
+          {/* Placeholder, no value */}
+          <Input
+            label="Placeholder only"
+            value=""
+            onChange={() => {}}
+            placeholder="e.g. admin"
+          />
+          {/* Disabled */}
+          <Input
+            label="Disabled"
+            value="locked"
+            onChange={() => {}}
+            disabled
+          />
+          {/* With error */}
+          <Input
+            label="With error"
+            value="bad"
+            onChange={() => {}}
+            error="This field is required"
+          />
+          {/* Mono variant */}
+          <Input
+            label="Mono (OAuth token)"
+            value="ya29.a0AfH6SMB…"
+            onChange={() => {}}
+            mono
+          />
+          {/* Password type */}
+          <Input
+            label="Password"
+            value={pwValue}
+            onChange={setPwValue}
+            type="password"
+            placeholder="••••••••"
+          />
+          {/* Email type */}
+          <Input
+            label="Email"
+            value=""
+            onChange={() => {}}
+            type="email"
+            placeholder="user@example.com"
+          />
         </div>
       </section>
 
