@@ -1,0 +1,74 @@
+/* Base button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--fontBody);
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  cursor: pointer;
+  transition: transform 0.08s, filter 0.12s;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Sizes */
+.size-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.size-md {
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+.size-lg {
+  padding: 14px 22px;
+  font-size: 16px;
+}
+
+/* Kinds */
+.kind-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.kind-ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+.kind-default {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+.kind-danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 30%, transparent);
+}
+
+/* Hover */
+.btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+/* Active */
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Disabled */
+.btn:disabled,
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
