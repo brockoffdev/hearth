@@ -10,6 +10,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.api import router as api_router
 from backend.app.auth.bootstrap import ensure_bootstrap_admin
@@ -18,6 +19,10 @@ from backend.app.db.base import get_session_factory
 from backend.app.static import mount_frontend
 
 logger = logging.getLogger(__name__)
+
+# Resolved once at import time; tests may monkeypatch this to redirect to a
+# temporary directory without affecting the real repo tree.
+_DOCS_DIR: Path = Path(__file__).resolve().parent.parent.parent / "docs"
 
 
 def _run_migrations() -> None:
@@ -70,6 +75,15 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(api_router, prefix="/api")
+
+    docs_dir = _DOCS_DIR
+    if docs_dir.is_dir():
+        application.mount(
+            "/docs",
+            StaticFiles(directory=str(docs_dir)),
+            name="docs",
+        )
+        logger.info("Mounted docs directory from %s", docs_dir)
 
     mount_frontend(application, settings.frontend_dist_dir)
 

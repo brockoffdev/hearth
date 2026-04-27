@@ -6,10 +6,12 @@ these tests.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.oauth2.credentials import Credentials
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -382,3 +384,103 @@ async def test_oauth_state_tokens_and_all_members_mapped(
     body = resp.json()
     assert body["connected"] is True
     assert body["calendars_mapped"] is True
+
+
+async def test_oauth_state_calendars_mapped_vacuously_true_when_no_members(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Tokens stored, zero family members → connected=true, calendars_mapped=true.
+
+    ``all(... for m in [])`` is vacuously True — no member can be unmapped if
+    there are no members.  This guards against a regression to ``bool(members)
+    and all(...)`` which would return False on empty.
+    """
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        session.add(
+            OauthToken(
+                id=1,
+                refresh_token="fake-refresh",
+                access_token="fake-access",
+                scopes="https://www.googleapis.com/auth/calendar",
+            )
+        )
+        # Delete all seeded family members so the list is empty.
+        result = await session.execute(select(FamilyMember))
+        for member in result.scalars().all():
+            await session.delete(member)
+        await session.commit()
+
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        resp = await ac.get("/api/google/oauth/state")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["connected"] is True
+    assert body["calendars_mapped"] is True
+
+
+# ---------------------------------------------------------------------------
+# get_active_credentials — token refresh persistence
+# ---------------------------------------------------------------------------
+
+
+async def test_get_active_credentials_persists_refresh(
+    db_engine: AsyncEngine,
+) -> None:
+    """get_active_credentials updates the OauthToken row when the access token is refreshed.
+
+    Scenario: the stored access_token is expired.  ``credentials_for`` is
+    mocked to return a new token and set ``was_refreshed=True``.  After the
+    call the OauthToken row must contain the refreshed access_token and
+    expires_at.
+    """
+    from backend.app.api.google import get_active_credentials
+
+    refreshed_token = "ya29.refreshed-access-token"
+    new_expiry = datetime(2099, 1, 1, 0, 0, 0)  # naive UTC, far future
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        # Pre-populate with an expired access token and a valid refresh token.
+        session.add(
+            OauthToken(
+                id=1,
+                refresh_token="valid-refresh-token",
+                access_token="expired-access-token",
+                expires_at=datetime(2000, 1, 1),  # clearly in the past
+                scopes="https://www.googleapis.com/auth/calendar",
+            )
+        )
+        # Ensure credentials settings are present.
+        for key, value in [
+            ("google_oauth_client_id", "test-client-id"),
+            ("google_oauth_client_secret", "test-client-secret"),
+        ]:
+            from backend.app.db.models import Setting as SettingModel
+
+            session.add(SettingModel(key=key, value=value))
+        await session.commit()
+
+    # Build a Credentials-like mock that represents the post-refresh state.
+    mock_creds = MagicMock(spec=Credentials)
+    mock_creds.token = refreshed_token
+    mock_creds.expiry = new_expiry
+
+    with patch(
+        "backend.app.api.google.credentials_for",
+        return_value=(mock_creds, True),
+    ):
+        async with factory() as session:
+            await get_active_credentials(session)
+
+    # Verify the DB row was updated with the refreshed values.
+    async with factory() as session:
+        result = await session.execute(select(OauthToken).where(OauthToken.id == 1))
+        token_row = result.scalar_one_or_none()
+
+    assert token_row is not None
+    assert token_row.access_token == refreshed_token
+    assert token_row.expires_at == new_expiry

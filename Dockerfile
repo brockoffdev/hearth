@@ -32,9 +32,10 @@ WORKDIR /app
 # Copy virtual environment from builder
 COPY --from=backend-builder /build/.venv /app/.venv
 
-# Copy application source and Alembic migrations
+# Copy application source, Alembic migrations, and docs
 COPY backend/ ./backend/
 COPY alembic.ini ./
+COPY docs/ ./docs/
 
 # Copy built frontend from frontend-builder
 COPY --from=frontend-builder /app/dist ./frontend/dist/

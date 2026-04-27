@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
+from google.oauth2.credentials import Credentials
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,7 @@ from backend.app.auth.dependencies import require_admin
 from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import FamilyMember, OauthToken, Setting
+from backend.app.google.calendar_client import _expiry_to_datetime, credentials_for
 from backend.app.google.oauth_client import build_flow, fetch_token, get_authorization_url
 
 logger = logging.getLogger(__name__)
@@ -79,6 +81,41 @@ async def _get_setting(db: AsyncSession, key: str) -> str | None:
     result = await db.execute(select(Setting).where(Setting.key == key))
     row = result.scalar_one_or_none()
     return row.value if row is not None else None
+
+
+async def get_active_credentials(db: AsyncSession) -> Credentials:
+    """Load tokens from the DB, refresh if needed, persist the refreshed access token.
+
+    Returns ready-to-use ``google.oauth2.credentials.Credentials``.
+    Raises ``HTTPException(400)`` if no OAuth connection has been completed yet.
+    """
+    token_result = await db.execute(select(OauthToken).where(OauthToken.id == 1))
+    token_row = token_result.scalar_one_or_none()
+    if token_row is None or not token_row.refresh_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Google OAuth not connected — complete the setup wizard first",
+        )
+
+    client_id = await _get_setting(db, _KEY_CLIENT_ID)
+    client_secret = await _get_setting(db, _KEY_CLIENT_SECRET)
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "OAuth credentials not configured — "
+                "call /api/google/oauth/credentials first"
+            ),
+        )
+
+    creds, was_refreshed = await credentials_for(token_row, client_id, client_secret)
+
+    if was_refreshed:
+        token_row.access_token = creds.token
+        token_row.expires_at = _expiry_to_datetime(creds)
+        await db.commit()
+
+    return creds
 
 
 # ---------------------------------------------------------------------------
@@ -249,9 +286,7 @@ async def oauth_state(
     # Check whether all family members have a calendar mapped.
     members_result = await db.execute(select(FamilyMember))
     members = list(members_result.scalars().all())
-    calendars_mapped = bool(members) and all(
-        m.google_calendar_id is not None for m in members
-    )
+    calendars_mapped = all(m.google_calendar_id is not None for m in members)
 
     return OauthStateResponse(
         connected=connected,
