@@ -16,4 +16,14 @@ describe('HEARTH_FAMILY', () => {
     const ids = HEARTH_FAMILY.map((m) => m.id);
     expect(ids).toEqual(['bryant', 'danielle', 'isabella', 'eliana', 'family']);
   });
+
+  it('every member has a unique hex', () => {
+    const hexes = HEARTH_FAMILY.map((m) => m.hex.toLowerCase());
+    expect(new Set(hexes).size).toBe(hexes.length);
+  });
+
+  it('every member has a unique id', () => {
+    const ids = HEARTH_FAMILY.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

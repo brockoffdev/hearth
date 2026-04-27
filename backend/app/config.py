@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     debug: bool = False
     data_dir: Path = Path("/data")
     frontend_dist_dir: Path = Path("frontend/dist")
+    # Override via JSON list, e.g. HEARTH_CORS_ORIGINS='["https://hearth.example.com"]'
     cors_origins: list[str] = [
         "http://localhost:5173",  # Vite dev server
         "http://localhost:8080",  # Production / compose

@@ -22,6 +22,14 @@ function readStoredTheme(): Theme {
   return 'light';
 }
 
+// Apply stored theme to <html> synchronously before first paint. Because this
+// module is loaded via <script type="module">, evaluation blocks paint — so
+// setting data-theme here eliminates the Light-flash for Dark/Sepia users.
+(function applyThemeBeforeFirstPaint() {
+  const theme = readStoredTheme();
+  document.documentElement.dataset['theme'] = theme;
+})();
+
 interface ThemeContextValue {
   theme: Theme;
   setTheme: (theme: Theme) => void;

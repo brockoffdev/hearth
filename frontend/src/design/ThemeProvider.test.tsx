@@ -129,4 +129,18 @@ describe('ThemeProvider', () => {
     }).toThrow('useTheme must be used within a ThemeProvider');
     console.error = consoleError;
   });
+
+  it('respects data-theme attribute pre-set before React mounts (inline-script path)', () => {
+    // Simulate what the inline script in index.html does: set data-theme on <html>
+    // before React hydrates. ThemeProvider should read this and match its initial state.
+    document.documentElement.dataset['theme'] = 'dark';
+    window.localStorage.setItem('hearth.theme', 'dark');
+    render(
+      <ThemeProvider>
+        <ThemeConsumer />
+      </ThemeProvider>
+    );
+    expect(screen.getByTestId('theme').textContent).toBe('dark');
+    expect(document.documentElement.dataset['theme']).toBe('dark');
+  });
 });
