@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from './design/ThemeProvider';
+import { AuthProvider } from './auth/AuthProvider';
 import { App } from './App';
 import './design/reset.css';
 import './design/tokens.css';
@@ -14,7 +15,9 @@ createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
   </StrictMode>
