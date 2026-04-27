@@ -1,0 +1,10 @@
+/* DesktopShell — simple artboard frame for desktop screen previews. */
+.desktopShell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radiusLg);
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  /* width/height are set via inline style */
+}
