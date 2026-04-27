@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     # Override via HEARTH_MAX_UPLOAD_BYTES.
     max_upload_bytes: int = 25 * 1024 * 1024  # 25 MB
 
+    # Fake-pipeline timing knobs — Phase 3 only.
+    # Phase 4 replaces the fake pipeline with real VLM calls; these settings
+    # become irrelevant once real timing is driven by model inference.
+    # Seconds to pause between pipeline stages (non-cell-progress stages).
+    pipeline_stage_delay_seconds: float = 1.5
+    # Seconds to pause between individual cell events during cell_progress.
+    pipeline_cell_delay_seconds: float = 0.15
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
