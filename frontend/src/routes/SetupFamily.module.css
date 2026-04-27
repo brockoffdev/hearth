@@ -1,0 +1,224 @@
+/* Setup wizard step 3 — Family calendar mapping */
+
+.outer {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.inner {
+  width: 800px;
+  padding: 40px;
+}
+
+.breadcrumbRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 26px;
+}
+
+.stepLabel {
+  font-size: 12px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.title {
+  font-family: var(--fontDisplay);
+  font-size: 38px;
+  line-height: 42px;
+  letter-spacing: -0.8px;
+  margin-top: 6px;
+  margin-bottom: 0;
+  color: var(--ink);
+}
+
+.title em {
+  font-style: italic;
+}
+
+.subtitle {
+  color: var(--fgSoft);
+  font-size: 14px;
+  margin-top: 10px;
+  max-width: 580px;
+}
+
+/* Status line above the table */
+.statusLine {
+  font-size: 13px;
+  color: var(--fgSoft);
+  margin-top: 22px;
+  margin-bottom: 10px;
+}
+
+.statusLine strong {
+  color: var(--ink);
+}
+
+/* Table card */
+.tableCard {
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  overflow: hidden;
+}
+
+.tableHeader {
+  display: grid;
+  grid-template-columns: 180px 1fr 110px;
+  padding: 10px 18px;
+  font-size: 11px;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  background: var(--surfaceMuted);
+  border-bottom: 1px solid var(--rule);
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 180px 1fr 110px;
+  padding: 14px 18px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+.memberCell {
+  display: flex;
+  align-items: center;
+}
+
+.calendarCell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selectRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calSelect {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: var(--fontBody);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.calSelect:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* "Create new" inline form */
+.createForm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.createInput {
+  flex: 1;
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12px;
+  font-family: var(--fontBody);
+  min-width: 0;
+}
+
+.createInput:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.createBtn {
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--fontBody);
+}
+
+.createBtn:hover {
+  background: var(--surfaceMuted);
+}
+
+.createBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.createCancelBtn {
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--fgSoft);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--fontBody);
+}
+
+.actionCell {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+/* Error banner */
+.errorBanner {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--danger-bg, #fff5f5);
+  border: 1px solid var(--danger, #e53e3e);
+  color: var(--danger, #e53e3e);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Action row at the bottom */
+.actions {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Loading state placeholder */
+.loadingText {
+  color: var(--fgSoft);
+  font-size: 13px;
+  padding: 10px 0;
+}
