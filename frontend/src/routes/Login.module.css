@@ -1,0 +1,106 @@
+/* Login — two-pane layout
+ * Mobile strategy: < 700px hides the left pane entirely and shows only
+ * the form pane. This is the simplest correct approach for Phase 2; a
+ * responsive left-pane could be added in a later design pass. */
+
+.page {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ── Left pane — marketing / editorial ─────────────────────── */
+.left {
+  padding: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(135deg, var(--paperDeep), var(--paper));
+  overflow: hidden;
+}
+
+.headline {
+  font-family: var(--fontDisplay);
+  font-size: 56px;
+  line-height: 58px;
+  letter-spacing: -1.5px;
+  color: var(--fg);
+  margin: 0;
+}
+
+.headlineAccent {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.tagline {
+  margin-top: 18px;
+  color: var(--fgSoft);
+  font-size: 15px;
+  max-width: 380px;
+  line-height: 1.55;
+}
+
+.footer {
+  font-family: var(--fontMono);
+  font-size: 11px;
+  color: var(--fgSoft);
+}
+
+/* ── Right pane — form ─────────────────────────────────────── */
+.right {
+  padding: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.eyebrow {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+.welcomeHeading {
+  font-family: var(--fontDisplay);
+  font-size: 36px;
+  margin: 6px 0 24px;
+  color: var(--fg);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 380px;
+}
+
+.submitBtn {
+  margin-top: 10px;
+}
+
+.forgotLine {
+  font-size: 12px;
+  color: var(--fgSoft);
+  text-align: center;
+  margin-top: 6px;
+}
+
+/* Hide left pane on narrow viewports */
+@media (max-width: 699px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .left {
+    display: none;
+  }
+
+  .right {
+    padding: 32px 24px;
+  }
+}
