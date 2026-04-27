@@ -131,8 +131,9 @@ describe('ThemeProvider', () => {
   });
 
   it('respects data-theme attribute pre-set before React mounts (inline-script path)', () => {
-    // Simulate what the inline script in index.html does: set data-theme on <html>
-    // before React hydrates. ThemeProvider should read this and match its initial state.
+    // Simulate what the module-evaluation IIFE in ThemeProvider.tsx does at first
+    // page load: set data-theme on <html> synchronously before React hydrates,
+    // so the persisted theme is in effect on the very first paint.
     document.documentElement.dataset['theme'] = 'dark';
     window.localStorage.setItem('hearth.theme', 'dark');
     render(

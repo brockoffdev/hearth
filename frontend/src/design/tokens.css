@@ -17,7 +17,7 @@
   --inkSoft:    #5C5246;
   --rule:       #E2D6BF;
   --accent:     #B0431F;
-  --accentSoft: #E8D2C4;
+  --accentSoft: #E8D2C4;  /* tinted accent backgrounds (used by EmptyHome, badges) */
   --success:    #3F7A4A;
   --warn:       #C97A1B;
   --danger:     #A6342B;
@@ -31,7 +31,7 @@
 
   /* Theme defaults — Light */
   --bg:           var(--paper);
-  --bgDeep:       var(--paperDeep);
+  --bgDeep:       var(--paperDeep);  /* deeper surface for contrast cards (Phase 5+) */
   --fg:           var(--ink);
   --fgSoft:       var(--inkSoft);
   --surface:      #FFFFFF;

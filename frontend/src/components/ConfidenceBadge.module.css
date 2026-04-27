@@ -22,8 +22,8 @@
 }
 
 .status-skipped {
-  color: var(--inkSoft);
-  background: color-mix(in oklab, var(--inkSoft) 12%, transparent);
+  color: var(--fgSoft);
+  background: color-mix(in oklab, var(--fgSoft) 12%, transparent);
 }
 
 .glyph {

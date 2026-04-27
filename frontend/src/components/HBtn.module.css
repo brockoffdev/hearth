@@ -39,13 +39,13 @@
 
 .kind-ghost {
   background: transparent;
-  color: var(--ink);
+  color: var(--fg);
   border-color: var(--rule);
 }
 
 .kind-default {
   background: var(--surface);
-  color: var(--ink);
+  color: var(--fg);
   border-color: var(--rule);
 }
 

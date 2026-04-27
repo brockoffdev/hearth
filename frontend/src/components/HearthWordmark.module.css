@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--ink);
+  color: var(--fg);
   /* --wordmark-size CSS custom property is set via inline style (from size prop) */
 }
 
