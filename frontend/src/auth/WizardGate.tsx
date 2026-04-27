@@ -12,9 +12,6 @@
  *            The startsWith('/setup/') check (with trailing slash) is intentional.
  *   4. Otherwise → render children.
  *
- * TODO Task E: /setup/google route will be implemented in Phase 2 Task E.
- *              Until then, the redirect lands on the placeholder route.
- * TODO Task F: /setup/family route will be implemented in Phase 2 Task F.
  */
 
 import type { ReactNode } from 'react';

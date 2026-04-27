@@ -31,16 +31,16 @@ interface FamilyMemberFixture {
 const FAMILY_MEMBERS_ALL_UNMAPPED: FamilyMemberFixture[] = [
   { id: 1, name: 'Bryant', color_hex_center: '#2E5BA8', google_calendar_id: null },
   { id: 2, name: 'Danielle', color_hex_center: '#C0392B', google_calendar_id: null },
-  { id: 3, name: 'Isabella', color_hex_center: '#7B4FB8', google_calendar_id: null },
-  { id: 4, name: 'Eliana', color_hex_center: '#E17AA1', google_calendar_id: null },
+  { id: 3, name: 'Izzy', color_hex_center: '#7B4FB8', google_calendar_id: null },
+  { id: 4, name: 'Ellie', color_hex_center: '#E17AA1', google_calendar_id: null },
   { id: 5, name: 'Family', color_hex_center: '#D97A2C', google_calendar_id: null },
 ];
 
 const FAMILY_MEMBERS_TWO_MAPPED: FamilyMemberFixture[] = [
   { id: 1, name: 'Bryant', color_hex_center: '#2E5BA8', google_calendar_id: 'cal1@group.calendar.google.com' },
   { id: 2, name: 'Danielle', color_hex_center: '#C0392B', google_calendar_id: 'cal2@group.calendar.google.com' },
-  { id: 3, name: 'Isabella', color_hex_center: '#7B4FB8', google_calendar_id: null },
-  { id: 4, name: 'Eliana', color_hex_center: '#E17AA1', google_calendar_id: null },
+  { id: 3, name: 'Izzy', color_hex_center: '#7B4FB8', google_calendar_id: null },
+  { id: 4, name: 'Ellie', color_hex_center: '#E17AA1', google_calendar_id: null },
   { id: 5, name: 'Family', color_hex_center: '#D97A2C', google_calendar_id: null },
 ];
 
@@ -127,8 +127,8 @@ describe('SetupFamily — family rows', () => {
       expect(screen.getAllByText('Bryant').length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getAllByText('Danielle').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Isabella').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Eliana').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Izzy').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Ellie').length).toBeGreaterThanOrEqual(1);
     // Family name cell (row in the table)
     const familyTexts = screen.getAllByText('Family');
     expect(familyTexts.length).toBeGreaterThanOrEqual(1);
@@ -325,7 +325,7 @@ describe('SetupFamily — create new calendar', () => {
     const newCal = { id: 'newcal@group.calendar.google.com', summary: 'Izzy' };
     const patchedMember = {
       id: 3,
-      name: 'Isabella',
+      name: 'Izzy',
       color_hex_center: '#7B4FB8',
       google_calendar_id: 'newcal@group.calendar.google.com',
     };
@@ -346,7 +346,7 @@ describe('SetupFamily — create new calendar', () => {
       expect(document.querySelectorAll('select').length).toBe(5);
     });
 
-    // Open the "Create new" form for Isabella (3rd row = index 2).
+    // Open the "Create new" form for Izzy (3rd row = index 2).
     const createBtns = screen.getAllByRole('button', { name: /create new/i });
     await act(async () => {
       fireEvent.click(createBtns[2]!);

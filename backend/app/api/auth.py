@@ -61,7 +61,7 @@ class UserResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _user_response(user: User) -> UserResponse:
+def to_user_response(user: User) -> UserResponse:
     """Construct a UserResponse from a User ORM row."""
     return UserResponse.model_validate(user)
 
@@ -97,7 +97,7 @@ async def login(
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     _set_session(response, user.id, settings)
-    return _user_response(user)
+    return to_user_response(user)
 
 
 @router.post("/logout")
@@ -116,7 +116,7 @@ async def me(
     current_user: User = Depends(require_user),
 ) -> UserResponse:
     """Return the current authenticated user."""
-    return _user_response(current_user)
+    return to_user_response(current_user)
 
 
 @router.post("/change-password", response_model=UserResponse)
@@ -152,4 +152,4 @@ async def change_password(
     await db.commit()
     await db.refresh(current_user)
 
-    return _user_response(current_user)
+    return to_user_response(current_user)

@@ -28,9 +28,9 @@ from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import FamilyMember, OauthToken, Setting
 from backend.app.google.calendar_client import (
-    _expiry_to_datetime,
     create_calendar,
     credentials_for,
+    expiry_to_datetime,
     list_calendars,
 )
 from backend.app.google.oauth_client import build_flow, fetch_token, get_authorization_url
@@ -132,7 +132,7 @@ async def get_active_credentials(db: AsyncSession) -> Credentials:
 
     if was_refreshed:
         token_row.access_token = creds.token
-        token_row.expires_at = _expiry_to_datetime(creds)
+        token_row.expires_at = expiry_to_datetime(creds)
         await db.commit()
 
     return creds

@@ -24,7 +24,7 @@ export function Index() {
 
       <HearthWordmark size={28} />
 
-      <p className={styles.status}>Phase 1 scaffold ✓</p>
+      <p className={styles.status}>Phase 2 onboarding ✓</p>
 
       <button className={styles.themeToggle} onClick={cycleTheme}>
         {THEME_LABELS[theme]} — click to cycle

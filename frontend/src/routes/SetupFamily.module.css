@@ -35,7 +35,7 @@
   letter-spacing: -0.8px;
   margin-top: 6px;
   margin-bottom: 0;
-  color: var(--ink);
+  color: var(--fg);
 }
 
 .title em {
@@ -58,7 +58,7 @@
 }
 
 .statusLine strong {
-  color: var(--ink);
+  color: var(--fg);
 }
 
 /* Table card */
@@ -131,7 +131,7 @@
   border-radius: 8px;
   border: 1px solid var(--rule);
   background: var(--bg);
-  color: var(--ink);
+  color: var(--fg);
   font-size: 13px;
   font-family: var(--fontBody);
   cursor: pointer;
@@ -156,7 +156,7 @@
   border-radius: 7px;
   border: 1px solid var(--rule);
   background: var(--bg);
-  color: var(--ink);
+  color: var(--fg);
   font-size: 12px;
   font-family: var(--fontBody);
   min-width: 0;
@@ -172,7 +172,7 @@
   border-radius: 7px;
   border: 1px solid var(--rule);
   background: var(--surface);
-  color: var(--ink);
+  color: var(--fg);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;

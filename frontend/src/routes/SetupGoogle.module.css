@@ -35,7 +35,7 @@
   letter-spacing: -0.8px;
   margin-top: 6px;
   margin-bottom: 0;
-  color: var(--ink);
+  color: var(--fg);
 }
 
 .title em {
@@ -80,7 +80,7 @@
   font-weight: 700;
   font-size: 14px;
   margin: 0 0 14px;
-  color: var(--ink);
+  color: var(--fg);
 }
 
 .cardForm {
@@ -142,5 +142,5 @@
 .successText {
   font-size: 16px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--fg);
 }

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.api.auth import UserResponse, _user_response
+from backend.app.api.auth import UserResponse, to_user_response
 from backend.app.auth.dependencies import require_admin
 from backend.app.db.base import get_db
 from backend.app.db.models import FamilyMember, OauthToken, User
@@ -56,4 +56,4 @@ async def complete_google_setup(
     db.add(current_admin)
     await db.commit()
     await db.refresh(current_admin)
-    return _user_response(current_admin)
+    return to_user_response(current_admin)

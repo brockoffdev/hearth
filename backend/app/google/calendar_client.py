@@ -43,7 +43,7 @@ async def credentials_for(
     Returns ``(credentials, was_refreshed)`` so the caller can persist the
     new token back to the database when ``was_refreshed`` is True.
     """
-    from backend.app.google.oauth_client import _GOOGLE_TOKEN_URI  # local import avoids circular
+    from backend.app.google.oauth_client import GOOGLE_TOKEN_URI  # local import avoids circular
 
     scopes_list: list[str] = (
         token.scopes.split() if token.scopes else [_CALENDAR_SCOPE]
@@ -51,7 +51,7 @@ async def credentials_for(
     creds = Credentials(  # type: ignore[no-untyped-call]
         token=token.access_token,
         refresh_token=token.refresh_token,
-        token_uri=_GOOGLE_TOKEN_URI,
+        token_uri=GOOGLE_TOKEN_URI,
         client_id=client_id,
         client_secret=client_secret,
         scopes=scopes_list,
@@ -67,7 +67,7 @@ async def credentials_for(
     return creds, was_refreshed
 
 
-def _expiry_to_datetime(creds: Credentials) -> datetime | None:
+def expiry_to_datetime(creds: Credentials) -> datetime | None:
     """Extract the expiry from a Credentials object as a naive UTC datetime."""
     expiry: datetime | None = getattr(creds, "expiry", None)
     if expiry is None:

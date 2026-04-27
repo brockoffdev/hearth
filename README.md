@@ -7,8 +7,8 @@ The whiteboard stays the source of truth — Hearth is the loudspeaker that broa
 
 ## Status
 
-**Phase 1 of 10 — scaffold + design system.**
-The skeleton runs but has no business logic yet (no upload, no VLM pipeline, no Google Calendar integration). See [docs/spec.md](docs/spec.md) for the full plan and [design_handoff_hearth/](design_handoff_hearth/) for the locked-in UI design.
+**Phase 2 of 10 — onboarding.**
+The scaffold and design system are complete. Phase 2 adds local-account login and the first-run Google OAuth + calendar mapping wizard. See [docs/spec.md](docs/spec.md) for the full plan and [design_handoff_hearth/](design_handoff_hearth/) for the locked-in UI design.
 
 ## Quickstart
 
@@ -91,10 +91,10 @@ docker-compose.yml   Single-host deploy (Ollama VLM sidecar wired in for Phase 5
 
 ## Roadmap
 
-Phase 1 (scaffold + design system) is in flight on this branch. Phases 2–10 follow:
+Phase 1 is complete. Phase 2 (onboarding) is in flight on this branch. Phases 3–10 follow:
 
-1. Project scaffold + design system ← we are here
-2. Onboarding: local-account login + first-run Google OAuth wizard
+1. Project scaffold + design system ✓
+2. Onboarding: local-account login + first-run Google OAuth wizard ← we are here
 3. Capture flow (mobile): home → camera → fake-progress processing
 4. VLM pipeline backend (Ollama default, Gemini/Anthropic alternates)
 5. Real SSE wiring (HEARTH_STAGES events on processing screen)

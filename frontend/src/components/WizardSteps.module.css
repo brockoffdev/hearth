@@ -61,7 +61,7 @@
 }
 
 .step[data-status="active"] .label {
-  color: var(--ink);
+  color: var(--fg);
   font-weight: 700;
 }
 

@@ -17,7 +17,7 @@ from google_auth_oauthlib.flow import Flow
 CALENDAR_SCOPES: list[str] = ["https://www.googleapis.com/auth/calendar"]
 
 _GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
-_GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
+GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
 def build_flow(
@@ -37,7 +37,7 @@ def build_flow(
             "client_id": client_id,
             "client_secret": client_secret,
             "auth_uri": _GOOGLE_AUTH_URI,
-            "token_uri": _GOOGLE_TOKEN_URI,
+            "token_uri": GOOGLE_TOKEN_URI,
             "redirect_uris": [redirect_uri],
         }
     }
