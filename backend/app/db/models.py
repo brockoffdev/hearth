@@ -1,12 +1,12 @@
-"""SQLAlchemy 2.0 declarative models for Phase 2 tables.
+"""SQLAlchemy 2.0 declarative models for Phase 2+ tables.
 
-Tables created here: users, family_members, oauth_tokens, settings.
-Deferred to later phases: uploads, events, event_corrections.
+Tables created here: users, family_members, oauth_tokens, settings, uploads.
+Deferred to later phases: events, event_corrections.
 """
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, text
+from sqlalchemy import CheckConstraint, ForeignKey, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db.base import Base
@@ -71,3 +71,27 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(primary_key=True)
     value: Mapped[str] = mapped_column(nullable=False)
+
+
+class Upload(Base):
+    """A photo upload row — created when a user POSTs a photo for processing."""
+
+    __tablename__ = "uploads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    image_path: Mapped[str] = mapped_column(nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=text("CURRENT_TIMESTAMP"), index=True
+    )
+    status: Mapped[str] = mapped_column(nullable=False)
+    provider: Mapped[str | None] = mapped_column(nullable=True)
+    error: Mapped[str | None] = mapped_column(nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','processing','completed','failed')",
+            name="uploads_status_check",
+        ),
+    )
