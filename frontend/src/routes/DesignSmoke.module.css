@@ -1,5 +1,122 @@
-.placeholder {
+.page {
+  min-height: 100vh;
   padding: 2rem;
+  background: var(--bg);
+  color: var(--fg);
   font-family: var(--fontBody);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.themeToggle {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--fontBody);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.themeToggle:hover {
+  background: var(--surfaceMuted);
+  border-color: var(--accent);
+}
+
+.subtitle {
   color: var(--fgSoft);
+  font-size: 0.875rem;
+  margin-bottom: 2rem;
+}
+
+.section {
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sectionTitle {
+  font-family: var(--fontBody);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fgSoft);
+  margin-bottom: 1.25rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.swatchLabel {
+  font-size: 11px;
+  color: var(--fgSoft);
+  font-family: var(--fontMono);
+}
+
+/* HBtn grid: 4 kinds × 3 sizes */
+.btnGrid {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 0.75rem;
+  width: fit-content;
+}
+
+/* FamilyChip grid: 5 members × 3 sizes */
+.chipGrid {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 0.75rem 1.5rem;
+  width: fit-content;
+}
+
+/* Shell thumbnails — scale down to avoid giant boxes */
+.shellRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.shellThumb {
+  transform-origin: top left;
+  transform: scale(0.18);
+  width: 390px;  /* PhoneShell natural width — thumb will scale it down */
+  height: 152px; /* scaled height visible area */
+  overflow: visible;
+}
+
+.shellThumb:last-child {
+  width: 1280px;
+}
+
+.shellInner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--fontBody);
+  font-size: 24px;
+  color: var(--fgSoft);
+  font-weight: 500;
 }
