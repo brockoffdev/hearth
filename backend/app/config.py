@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # Must NOT have a trailing slash.
     public_base_url: str = "http://localhost:8080"
 
+    # Maximum size in bytes accepted for a single photo upload.
+    # Override via HEARTH_MAX_UPLOAD_BYTES.
+    max_upload_bytes: int = 25 * 1024 * 1024  # 25 MB
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
