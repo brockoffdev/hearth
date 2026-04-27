@@ -12,7 +12,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api import router as api_router
+from backend.app.auth.bootstrap import ensure_bootstrap_admin
 from backend.app.config import get_settings
+from backend.app.db.base import get_session_factory
 from backend.app.static import mount_frontend
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,9 @@ def create_app() -> FastAPI:
             logger.info("Running database migrations…")
             await asyncio.to_thread(_run_migrations)
             logger.info("Migrations complete.")
+        if settings.bootstrap_admin_on_startup:
+            logger.info("Ensuring bootstrap admin…")
+            await ensure_bootstrap_admin(get_session_factory())
         yield
 
     application = FastAPI(
