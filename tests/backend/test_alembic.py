@@ -13,9 +13,9 @@ within a running event loop — use asyncio.to_thread to offload them.
 """
 
 import asyncio
-import os
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect, text
@@ -32,10 +32,15 @@ def _alembic_cfg() -> Config:
     return cfg
 
 
-async def test_alembic_upgrade_downgrade_roundtrip(db_url: str) -> None:
+async def test_alembic_upgrade_downgrade_roundtrip(
+    db_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Full upgrade → verify → downgrade → verify cycle."""
     # Point env.py at the test DB by overriding the environment variable.
-    os.environ["HEARTH_DATABASE_URL"] = db_url
+    # monkeypatch.setenv restores the original value automatically on test exit,
+    # including on failure — no manual finally block needed for env restoration.
+    monkeypatch.setenv("HEARTH_DATABASE_URL", db_url)
     # Clear the lru_cache so Settings picks up the overridden env var.
     get_settings.cache_clear()
 
@@ -90,6 +95,5 @@ async def test_alembic_upgrade_downgrade_roundtrip(db_url: str) -> None:
         await engine2.dispose()
 
     finally:
-        # Restore settings state so other tests are unaffected.
-        os.environ.pop("HEARTH_DATABASE_URL", None)
+        # monkeypatch handles env restoration; keep cache_clear as defensive measure.
         get_settings.cache_clear()

@@ -5,6 +5,7 @@ the environment variable override below takes effect before create_app()
 is called via module-level imports in test files.
 """
 
+import asyncio
 import os
 
 # Disable automatic migrations during tests — each test that needs a DB
@@ -15,9 +16,21 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
-from backend.app.db.base import Base, get_session_factory
+from backend.app.config import get_settings
+from backend.app.db.base import get_session_factory
+
+
+def _alembic_config_for(url: str) -> Config:
+    """Return an Alembic Config pointing at the repo alembic.ini, overriding the DB URL."""
+    ini_path = Path(__file__).resolve().parent.parent.parent / "alembic.ini"
+    cfg = Config(str(ini_path))
+    cfg.set_main_option("script_location", "backend/alembic")
+    cfg.set_main_option("sqlalchemy.url", url)
+    return cfg
 
 
 @pytest.fixture(scope="function")
@@ -32,13 +45,30 @@ def db_url(tmp_path: Path) -> str:
 
 
 @pytest.fixture(scope="function")
-async def db_engine(db_url: str) -> AsyncGenerator[AsyncEngine, None]:
-    """Create an async engine, apply all model DDL, yield, then dispose."""
-    engine = create_async_engine(db_url, echo=False, future=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    await engine.dispose()
+async def db_engine(
+    db_url: str, monkeypatch: pytest.MonkeyPatch
+) -> AsyncGenerator[AsyncEngine, None]:
+    """Create an async engine, run real migrations, yield, then dispose.
+
+    Bootstraps the test schema via alembic upgrade head rather than
+    Base.metadata.create_all so model tests exercise the same DDL that
+    production sees on first boot.  Test DBs will also contain the seeded
+    family members from migration 0002.
+    """
+    monkeypatch.setenv("HEARTH_DATABASE_URL", db_url)
+    get_settings.cache_clear()
+
+    # Run real migrations against the test DB rather than create_all,
+    # so model tests exercise the same DDL production sees on first boot.
+    cfg = _alembic_config_for(db_url)
+    await asyncio.to_thread(command.upgrade, cfg, "head")
+
+    engine = create_async_engine(db_url, future=True)
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+        get_settings.cache_clear()
 
 
 @pytest.fixture(scope="function")
