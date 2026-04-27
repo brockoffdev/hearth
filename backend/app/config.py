@@ -30,6 +30,26 @@ class Settings(BaseSettings):
     # Set HEARTH_RUN_MIGRATIONS_ON_STARTUP=false in tests to keep them isolated.
     run_migrations_on_startup: bool = True
 
+    # When True, create the bootstrap admin user on startup if no users exist.
+    # Set HEARTH_BOOTSTRAP_ADMIN_ON_STARTUP=false in tests (each test controls
+    # bootstrap explicitly via the ensure_bootstrap_admin fixture).
+    bootstrap_admin_on_startup: bool = True
+
+    # Required: a long random string used to sign session cookies.
+    # Generate one with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(32))"
+    # Set HEARTH_SESSION_SECRET in your environment or .env file.
+    # The application will refuse to start if this is not set.
+    session_secret: str
+
+    # Session cookie configuration.
+    session_cookie_name: str = "hearth_session"
+    # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
+    # False by default to allow plain HTTP in local dev.
+    session_cookie_secure: bool = False
+    # 30 days — forces a periodic re-login without annoying daily users.
+    session_cookie_max_age_seconds: int = 60 * 60 * 24 * 30
+
     model_config = SettingsConfigDict(env_prefix="HEARTH_")
 
 

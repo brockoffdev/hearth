@@ -11,6 +11,11 @@ import os
 # Disable automatic migrations during tests — each test that needs a DB
 # creates its own isolated SQLite database via the db_engine fixture below.
 os.environ.setdefault("HEARTH_RUN_MIGRATIONS_ON_STARTUP", "false")
+# Disable bootstrap admin on startup; tests that need it call ensure_bootstrap_admin
+# directly so they control which tests get an admin user.
+os.environ.setdefault("HEARTH_BOOTSTRAP_ADMIN_ON_STARTUP", "false")
+# Fixed test secret for session cookies — NEVER use this value in production.
+os.environ.setdefault("HEARTH_SESSION_SECRET", "test-secret-do-not-use-in-prod")
 
 from collections.abc import AsyncGenerator
 from pathlib import Path
