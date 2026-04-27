@@ -1,9 +1,6 @@
-"""bcrypt password hashing helpers.
+"""Password hashing helpers.
 
-Uses the bcrypt library directly (bcrypt 5.x) with work factor 12.
-passlib 1.7 is included as a dependency but is not used for hashing because
-it does not yet support bcrypt 5.x's API changes; direct bcrypt usage is
-simpler and equally correct here.
+Uses the `bcrypt` library directly. Default work factor 12, per spec §7.
 """
 
 import bcrypt
@@ -20,3 +17,9 @@ def hash_password(plain: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if *plain* matches *hashed*, False otherwise."""
     return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+
+# Dummy hash used by the login flow's user-not-found path so the bcrypt cost
+# is paid regardless of whether the username exists. Constant-time enumeration
+# defense.
+DUMMY_PASSWORD_HASH: str = hash_password("hearth-dummy-password-never-matched")

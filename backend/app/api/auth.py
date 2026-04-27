@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.auth.dependencies import require_user
-from backend.app.auth.passwords import hash_password, verify_password
+from backend.app.auth.passwords import DUMMY_PASSWORD_HASH, hash_password, verify_password
 from backend.app.auth.sessions import clear_session_cookie, create_session_cookie
 from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
@@ -88,8 +88,12 @@ async def login(
     result = await db.execute(select(User).where(User.username == body.username))
     user = result.scalar_one_or_none()
 
-    # Use a constant-time failure path so we don't reveal whether the username exists.
-    if user is None or not verify_password(body.password, user.password_hash):
+    # Both paths run a full bcrypt verification to keep timing constant regardless
+    # of whether the username exists.
+    if user is None:
+        verify_password(body.password, DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     _set_session(response, user.id, settings)

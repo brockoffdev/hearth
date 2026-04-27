@@ -33,6 +33,8 @@ def spa_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[FastAP
     original_get_settings = cfg_module.get_settings
     original_get_settings.cache_clear()
 
+    # pydantic-settings reads HEARTH_SESSION_SECRET from env (set in conftest), but
+    # mypy can't see that — it treats session_secret as missing. Hence the ignore.
     patched = lambda: Settings(frontend_dist_dir=dist)  # type: ignore[call-arg]  # noqa: E731
 
     # Patch in both the config module and main module (which imported it directly).

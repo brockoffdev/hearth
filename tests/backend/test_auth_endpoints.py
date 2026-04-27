@@ -6,6 +6,8 @@ against the real FastAPI app backed by an isolated per-test SQLite database.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -81,6 +83,25 @@ async def test_login_unknown_user_returns_401(
     assert "not found" not in detail.lower()
     assert "user" not in detail.lower()
     assert detail == "Invalid credentials"
+
+
+async def test_login_unknown_user_runs_bcrypt_to_defeat_timing_enumeration(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """Unknown-user path must call verify_password once (runs the dummy-hash bcrypt cost).
+
+    Patches backend.app.api.auth.verify_password to confirm it is invoked even
+    when the username does not exist, proving the constant-time enumeration
+    defense is wired up.
+    """
+    with patch("backend.app.api.auth.verify_password", return_value=False) as mock_vp:
+        async with bootstrapped_client as ac:
+            response = await ac.post(
+                "/api/auth/login",
+                json={"username": "nonexistent_user", "password": "whatever"},
+            )
+    assert response.status_code == 401
+    mock_vp.assert_called_once()
 
 
 async def test_login_wrong_password_returns_401(
