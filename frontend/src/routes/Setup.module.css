@@ -1,0 +1,96 @@
+/* Setup wizard step 1 — Account / password change */
+
+.outer {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.inner {
+  width: 760px;
+  padding: 40px;
+}
+
+.breadcrumbRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 26px;
+}
+
+.stepLabel {
+  font-size: 12px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.title {
+  font-family: var(--fontDisplay);
+  font-size: 42px;
+  line-height: 46px;
+  letter-spacing: -0.8px;
+  margin-top: 6px;
+  margin-bottom: 0;
+  color: var(--ink);
+}
+
+.subtitle {
+  color: var(--fgSoft);
+  font-size: 14px;
+  margin-top: 10px;
+  max-width: 560px;
+}
+
+.card {
+  margin-top: 28px;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--fgSoft);
+  font-family: var(--fontMono);
+  margin: -8px 0 0;
+}
+
+.formError {
+  font-size: 13px;
+  color: var(--danger, #e53e3e);
+  font-weight: 500;
+  margin: 0;
+}
+
+.actions {
+  margin-top: 4px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* "All done" fallback page */
+.allDone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 16px;
+  background: var(--bg);
+}
+
+.allDoneText {
+  font-size: 16px;
+  color: var(--fgSoft);
+}
