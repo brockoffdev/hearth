@@ -5,6 +5,7 @@ import { Login } from './routes/Login';
 import { Setup } from './routes/Setup';
 import { SetupGoogle } from './routes/SetupGoogle';
 import { SetupFamily } from './routes/SetupFamily';
+import { Upload } from './routes/Upload';
 import { RequireAuth } from './auth/RequireAuth';
 import { WizardGate } from './auth/WizardGate';
 
@@ -35,6 +36,7 @@ export function App() {
         <Route path="/setup" element={<Setup />} />
         <Route path="/setup/google" element={<SetupGoogle />} />
         <Route path="/setup/family" element={<SetupFamily />} />
+        <Route path="/upload" element={<Upload />} />
         <Route path="/" element={<Index />} />
         <Route path="*" element={<Index />} />
       </Route>
