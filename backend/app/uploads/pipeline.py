@@ -30,6 +30,7 @@ from backend.app.uploads.storage import read_photo, store_photo
 from backend.app.vision import (
     CellPromptContext,
     FamilyPaletteEntry,
+    VisionProvider,
     get_vision_provider,
 )
 
@@ -308,6 +309,7 @@ async def run_pipeline(
     on_event_extracted: Callable[[ExtractedEventRecord], Awaitable[None]] | None = None,
     data_dir: Path = Path("/data"),
     photographed_month: date | None = None,
+    vision_provider_instance: VisionProvider | None = None,
 ) -> AsyncGenerator[StageEvent, None]:
     """Run the real VLM pipeline for one upload.
 
@@ -321,7 +323,8 @@ async def run_pipeline(
     Args:
         upload_id: DB primary key of the Upload row being processed.
         image_path: Relative path to the photo file (relative to data_dir).
-        settings: Application settings; used to build the VisionProvider.
+        settings: Application settings; used to build the VisionProvider when
+            vision_provider_instance is not supplied.
         family_members: FamilyMember rows for color matching and palette context.
         stage_delay_seconds: Optional throttle pause between non-cell stages.
         cell_delay_seconds: Optional throttle pause between cell processing steps.
@@ -331,6 +334,9 @@ async def run_pipeline(
         data_dir: Root directory for reading and writing photos.
         photographed_month: The date of the photograph (year/month used to
             derive cell dates).  When None, defaults to date.today().
+        vision_provider_instance: Pre-built VisionProvider.  When supplied,
+            skips calling get_vision_provider(settings) so the runner can
+            inject a DB-override-resolved provider.
 
     Yields:
         StageEvent instances in HEARTH_STAGES_ORDER order.
@@ -420,7 +426,11 @@ async def run_pipeline(
         completed_stages=completed.copy(),
         remaining_seconds=estimate_remaining_seconds(completed),
     )
-    provider = get_vision_provider(settings)
+    provider = (
+        vision_provider_instance
+        if vision_provider_instance is not None
+        else get_vision_provider(settings)
+    )
     completed.append("model_loading")
     if stage_delay_seconds > 0:
         await asyncio.sleep(stage_delay_seconds)

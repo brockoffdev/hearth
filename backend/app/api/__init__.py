@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
 from .admin import router as admin_router
+from .admin_settings import router as admin_settings_router
+from .admin_users import router as admin_users_router
 from .auth import router as auth_router
 from .events import router as events_router
 from .family import router as family_router
@@ -14,6 +16,8 @@ router.include_router(health_router)
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
 router.include_router(google_router, prefix="/google", tags=["google"])
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
+router.include_router(admin_users_router, prefix="/admin/users", tags=["admin"])
+router.include_router(admin_settings_router, prefix="/admin/settings", tags=["admin"])
 router.include_router(setup_router, prefix="/setup", tags=["setup"])
 router.include_router(uploads_router, prefix="/uploads", tags=["uploads"])
 router.include_router(events_router, prefix="/events", tags=["events"])

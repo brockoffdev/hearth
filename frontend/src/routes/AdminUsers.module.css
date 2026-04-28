@@ -1,0 +1,363 @@
+/* AdminUsers route */
+/* Token-only. All colours via CSS custom properties. */
+
+/* ─── Page shell ────────────────────────────────────────────── */
+
+.page {
+  display: contents;
+  font-family: var(--fontBody);
+  color: var(--fg);
+}
+
+/* ─── Desktop layout (default) ──────────────────────────────── */
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+/* ─── Content area ───────────────────────────────────────────── */
+
+.content {
+  flex: 1;
+  padding: 36px;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ─── Page heading ───────────────────────────────────────────── */
+
+.heading {
+  margin-bottom: 28px;
+}
+
+.adminLabel {
+  font-size: 11px;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.title {
+  font-family: var(--fontDisplay);
+  font-size: 38px;
+  line-height: 1.1;
+  letter-spacing: -0.8px;
+  color: var(--fg);
+  margin: 0 0 6px;
+}
+
+.titleAccent {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--fgSoft);
+  margin: 0;
+}
+
+/* ─── Table card ─────────────────────────────────────────────── */
+
+.tableCard {
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.tableHeader {
+  display: grid;
+  grid-template-columns: 1.4fr 0.7fr 0.9fr 1fr;
+  padding: 12px 18px;
+  font-size: 11px;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surfaceMuted);
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 1.4fr 0.7fr 0.9fr 1fr;
+  padding: 14px 18px;
+  align-items: center;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+.username {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.usernameSelf {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.selfBadge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+  margin-left: 6px;
+  letter-spacing: 0.3px;
+}
+
+.rolePill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  line-height: 1;
+}
+
+.rolePillAdmin {
+  composes: rolePill;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.rolePillUser {
+  composes: rolePill;
+  background: var(--surfaceMuted);
+  color: var(--fgSoft);
+}
+
+.dateText {
+  font-size: 12px;
+  color: var(--fgSoft);
+  font-family: var(--fontMono);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ─── Inline password reset form ─────────────────────────────── */
+
+.pwForm {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+  grid-column: 1 / -1;
+}
+
+.pwInput {
+  flex: 1;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--fontBody);
+  outline: none;
+}
+
+.pwInput:focus {
+  border-color: var(--accent);
+}
+
+.pwSuccess {
+  font-size: 12px;
+  color: var(--success);
+  font-weight: 600;
+}
+
+/* ─── Footer actions ─────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ─── Add user modal ─────────────────────────────────────────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.modal {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
+}
+
+.modalTitle {
+  font-family: var(--fontDisplay);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  margin: 0;
+  color: var(--fg);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fieldInput {
+  font-size: 14px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--fontBody);
+  outline: none;
+}
+
+.fieldInput:focus {
+  border-color: var(--accent);
+}
+
+.fieldSelect {
+  font-size: 14px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--fontBody);
+  outline: none;
+  cursor: pointer;
+}
+
+.fieldSelect:focus {
+  border-color: var(--accent);
+}
+
+.inlineError {
+  font-size: 13px;
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.modalActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ─── 403 view ────────────────────────────────────────────────── */
+
+.forbidden {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+.forbiddenCard {
+  text-align: center;
+  padding: 48px 32px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  max-width: 320px;
+}
+
+.forbiddenTitle {
+  font-family: var(--fontDisplay);
+  font-size: 28px;
+  letter-spacing: -0.5px;
+  color: var(--danger);
+  margin: 0 0 8px;
+}
+
+.forbiddenText {
+  font-size: 14px;
+  color: var(--fgSoft);
+  margin: 0;
+}
+
+/* ─── Mobile stacked cards (under 640px) ─────────────────────── */
+
+@media (max-width: 640px) {
+  .content {
+    padding: 24px 16px;
+    padding-top: 56px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .tableCard {
+    border-radius: 12px;
+  }
+
+  .tableHeader {
+    display: none;
+  }
+
+  .tableRow {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+}

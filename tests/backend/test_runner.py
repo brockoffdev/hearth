@@ -351,8 +351,9 @@ async def test_runner_uses_real_pipeline_when_setting_true(
 
         assert row is not None
         assert row.status == "completed"
-        # Provider should be the vision_provider setting, not the fake label.
-        assert row.provider == "ollama"  # default vision_provider
+        # Provenance is "<provider>:<model>" so admins can tell which exact
+        # model produced the events on this upload (mirrors VisionProvider.name).
+        assert row.provider == "ollama:qwen2.5-vl:7b"
     finally:
         del os.environ["HEARTH_USE_REAL_PIPELINE"]
         get_settings.cache_clear()

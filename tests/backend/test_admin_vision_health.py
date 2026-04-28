@@ -73,14 +73,14 @@ async def test_vision_health_returns_healthy_when_provider_responds(
     bootstrapped_client: AsyncClient,
 ) -> None:
     """Admin GET /api/admin/vision/health returns 200 with healthy=true when provider responds."""
-    with patch(
-        "backend.app.api.admin.get_vision_provider"
-    ) as mock_factory:
-        mock_provider = AsyncMock()
-        mock_provider.name = "ollama:qwen2.5-vl:7b"
-        mock_provider.health_check = AsyncMock(return_value=True)
-        mock_factory.return_value = mock_provider
+    mock_provider = AsyncMock()
+    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.health_check = AsyncMock(return_value=True)
 
+    with patch(
+        "backend.app.api.admin.get_effective_vision_provider",
+        new=AsyncMock(return_value=mock_provider),
+    ):
         async with bootstrapped_client as ac:
             await _login_admin(ac)
             resp = await ac.get("/api/admin/vision/health")
@@ -98,14 +98,14 @@ async def test_vision_health_returns_unhealthy_when_provider_fails(
     bootstrapped_client: AsyncClient,
 ) -> None:
     """health_check() returning False yields 200 + healthy=false."""
-    with patch(
-        "backend.app.api.admin.get_vision_provider"
-    ) as mock_factory:
-        mock_provider = AsyncMock()
-        mock_provider.name = "ollama:qwen2.5-vl:7b"
-        mock_provider.health_check = AsyncMock(return_value=False)
-        mock_factory.return_value = mock_provider
+    mock_provider = AsyncMock()
+    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.health_check = AsyncMock(return_value=False)
 
+    with patch(
+        "backend.app.api.admin.get_effective_vision_provider",
+        new=AsyncMock(return_value=mock_provider),
+    ):
         async with bootstrapped_client as ac:
             await _login_admin(ac)
             resp = await ac.get("/api/admin/vision/health")
@@ -121,14 +121,14 @@ async def test_vision_health_handles_health_check_raising(
     bootstrapped_client: AsyncClient,
 ) -> None:
     """A buggy provider whose health_check() raises maps to 200 + healthy=false."""
-    with patch(
-        "backend.app.api.admin.get_vision_provider"
-    ) as mock_factory:
-        mock_provider = AsyncMock()
-        mock_provider.name = "ollama:qwen2.5-vl:7b"
-        mock_provider.health_check = AsyncMock(side_effect=RuntimeError("boom"))
-        mock_factory.return_value = mock_provider
+    mock_provider = AsyncMock()
+    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.health_check = AsyncMock(side_effect=RuntimeError("boom"))
 
+    with patch(
+        "backend.app.api.admin.get_effective_vision_provider",
+        new=AsyncMock(return_value=mock_provider),
+    ):
         async with bootstrapped_client as ac:
             await _login_admin(ac)
             resp = await ac.get("/api/admin/vision/health")
@@ -147,8 +147,8 @@ async def test_vision_health_handles_factory_error(
     error_message = "HEARTH_GEMINI_API_KEY is required when vision_provider='gemini'"
 
     with patch(
-        "backend.app.api.admin.get_vision_provider",
-        side_effect=ValueError(error_message),
+        "backend.app.api.admin.get_effective_vision_provider",
+        new=AsyncMock(side_effect=ValueError(error_message)),
     ):
         async with bootstrapped_client as ac:
             await _login_admin(ac)
