@@ -1,11 +1,38 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { ThemeProvider } from '../design/ThemeProvider';
 import { AuthProvider } from '../auth/AuthProvider';
+import { NewCaptureSheetProvider } from '../components/NewCaptureSheet';
 import { Index } from './Index';
 import type { User } from '../auth/AuthProvider';
-import type { UploadSummary } from '../lib/uploads';
+import type { Upload } from '../lib/uploads';
+import { useUploads } from '../lib/useUploads';
+
+// ---------------------------------------------------------------------------
+// Mock useUploads — all Index tests use this instead of raw fetch
+// ---------------------------------------------------------------------------
+
+vi.mock('../lib/useUploads', () => ({
+  useUploads: vi.fn(),
+}));
+
+const mocked = vi.mocked(useUploads);
+
+function makeUploadsResult(overrides: Partial<ReturnType<typeof useUploads>> = {}): ReturnType<typeof useUploads> {
+  return {
+    uploads: [],
+    inflightCount: 0,
+    longestETA: 0,
+    isLoading: false,
+    loadError: null,
+    lastFetchedAt: new Date(),
+    refetch: vi.fn(),
+    retry: vi.fn(),
+    cancel: vi.fn(),
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -20,27 +47,31 @@ const MOCK_USER: User = {
   created_at: '2026-01-01T00:00:00Z',
 };
 
-const MOCK_UPLOADS: UploadSummary[] = [
+const MOCK_UPLOADS: Upload[] = [
   {
-    id: 1,
+    id: '1',
     status: 'completed',
     image_path: 'uploads/abc.jpg',
     uploaded_at: new Date(Date.now() - 5 * 60_000).toISOString(),
     url: '/api/uploads/1/photo',
+    thumbLabel: 'Apr 27, 10:00 AM',
   },
   {
-    id: 2,
+    id: '2',
     status: 'processing',
     image_path: 'uploads/def.jpg',
     uploaded_at: new Date(Date.now() - 30_000).toISOString(),
     url: '/api/uploads/2/photo',
+    thumbLabel: 'Apr 27, 10:01 AM',
+    remaining_seconds: 45,
   },
   {
-    id: 3,
-    status: 'queued',
+    id: '3',
+    status: 'failed',
     image_path: 'uploads/ghi.jpg',
     uploaded_at: new Date(Date.now() - 10_000).toISOString(),
     url: '/api/uploads/3/photo',
+    thumbLabel: 'Apr 27, 10:02 AM',
   },
 ];
 
@@ -64,11 +95,14 @@ function renderIndex() {
     <MemoryRouter initialEntries={['/']}>
       <ThemeProvider>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/upload" element={<div data-testid="upload-page">Upload</div>} />
-            <Route path="/uploads/:id" element={<div data-testid="upload-detail-page">Detail</div>} />
-          </Routes>
+          <NewCaptureSheetProvider>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/upload" element={<div data-testid="upload-page">Upload</div>} />
+              <Route path="/uploads" element={<div data-testid="uploads-page">Uploads</div>} />
+              <Route path="/uploads/:id" element={<div data-testid="upload-detail-page">Detail</div>} />
+            </Routes>
+          </NewCaptureSheetProvider>
         </AuthProvider>
       </ThemeProvider>
     </MemoryRouter>,
@@ -80,14 +114,16 @@ function renderIndex() {
 // ---------------------------------------------------------------------------
 
 describe('Index (MobileHome)', () => {
-  it('renders greeting with the authenticated username', async () => {
+  beforeEach(() => {
+    // Default: authenticated user via /me fetch; useUploads mocked
     vi.stubGlobal(
       'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, [])),
+      vi.fn().mockResolvedValue(makeResponse(200, MOCK_USER)),
     );
+    mocked.mockReturnValue(makeUploadsResult());
+  });
 
+  it('renders greeting with the authenticated username', async () => {
     renderIndex();
 
     await waitFor(() =>
@@ -95,31 +131,23 @@ describe('Index (MobileHome)', () => {
     );
   });
 
-  it('renders the "Take a photo" CTA linking to /upload', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, [])),
-    );
-
+  it('renders the "Take a photo" CTA as a button that opens the capture sheet', async () => {
     renderIndex();
 
     await waitFor(() => expect(screen.getByText(/take a photo/i)).not.toBeNull());
 
-    const ctaLink = screen.getByRole('link', { name: /take a photo/i });
-    expect(ctaLink).not.toBeNull();
-    expect(ctaLink.getAttribute('href')).toBe('/upload');
+    // CTA is now a button (not a link)
+    const ctaBtn = screen.getByRole('button', { name: /take a photo/i });
+    expect(ctaBtn).not.toBeNull();
+
+    // Clicking it opens the NewCaptureSheet (dialog)
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(ctaBtn);
+    expect(screen.getByRole('dialog')).not.toBeNull();
   });
 
-  it('shows loading skeleton rows before data loads', async () => {
-    // Stub fetch: /me resolves instantly, /api/uploads never resolves
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockReturnValueOnce(new Promise(() => {})),
-    );
+  it('shows loading skeleton rows when isLoading is true', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ isLoading: true, lastFetchedAt: null }));
 
     renderIndex();
 
@@ -127,18 +155,12 @@ describe('Index (MobileHome)', () => {
       expect(screen.getByText(/hi,\s*testuser/i)).not.toBeNull(),
     );
 
-    // Skeleton rows should be present
     const skeletons = document.querySelectorAll('[data-testid="skeleton-row"]');
     expect(skeletons.length).toBeGreaterThan(0);
   });
 
-  it('shows empty state when API returns empty array', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, [])),
-    );
+  it('shows empty state when uploads is empty array', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ uploads: [], isLoading: false }));
 
     renderIndex();
 
@@ -147,13 +169,8 @@ describe('Index (MobileHome)', () => {
     );
   });
 
-  it('renders 3 upload rows when API returns 3 uploads', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, MOCK_UPLOADS)),
-    );
+  it('renders 3 upload rows when hook returns 3 uploads', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ uploads: MOCK_UPLOADS }));
 
     renderIndex();
 
@@ -163,16 +180,11 @@ describe('Index (MobileHome)', () => {
 
     expect(screen.getByText('Done')).not.toBeNull();
     expect(screen.getByText('Processing')).not.toBeNull();
-    expect(screen.getByText('Queued')).not.toBeNull();
+    expect(screen.getByText('Failed')).not.toBeNull();
   });
 
-  it('shows error banner when the API request fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(500, { detail: 'Server error' })),
-    );
+  it('shows error banner when loadError is set', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ loadError: 'Server error', isLoading: false }));
 
     renderIndex();
 
@@ -182,12 +194,7 @@ describe('Index (MobileHome)', () => {
   });
 
   it('each upload row links to /uploads/:id', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, MOCK_UPLOADS)),
-    );
+    mocked.mockReturnValue(makeUploadsResult({ uploads: MOCK_UPLOADS }));
 
     renderIndex();
 
@@ -196,19 +203,19 @@ describe('Index (MobileHome)', () => {
     );
 
     const rowLinks = document.querySelectorAll('a[href^="/uploads/"]');
-    expect(rowLinks.length).toBe(3);
-    expect(rowLinks[0]?.getAttribute('href')).toBe('/uploads/1');
-    expect(rowLinks[1]?.getAttribute('href')).toBe('/uploads/2');
-    expect(rowLinks[2]?.getAttribute('href')).toBe('/uploads/3');
+    // 3 upload rows + 1 InflightBanner (not shown: inflightCount=0) + UploadsLink
+    // UploadsLink links to /uploads, row links link to /uploads/1, /uploads/2, /uploads/3
+    const uploadRowLinks = Array.from(rowLinks).filter(
+      (a) => a.getAttribute('href')?.match(/\/uploads\/\d+$/),
+    );
+    expect(uploadRowLinks.length).toBe(3);
+    expect(uploadRowLinks[0]?.getAttribute('href')).toBe('/uploads/1');
+    expect(uploadRowLinks[1]?.getAttribute('href')).toBe('/uploads/2');
+    expect(uploadRowLinks[2]?.getAttribute('href')).toBe('/uploads/3');
   });
 
-  it('shows last-sync indicator after data loads', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, MOCK_UPLOADS)),
-    );
+  it('shows last-sync indicator after data loads (when lastFetchedAt is set)', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ lastFetchedAt: new Date() }));
 
     renderIndex();
 
@@ -217,38 +224,43 @@ describe('Index (MobileHome)', () => {
     );
   });
 
+  it('does not show last-sync indicator when lastFetchedAt is null', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ lastFetchedAt: null }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText(/hi,\s*testuser/i)).not.toBeNull(),
+    );
+
+    expect(screen.queryByText(/last sync/i)).toBeNull();
+  });
+
   it('truncates list to 10 most recent when more than 10 uploads returned', async () => {
-    const manyUploads: UploadSummary[] = Array.from({ length: 15 }, (_, i) => ({
-      id: i + 1,
+    const manyUploads: Upload[] = Array.from({ length: 15 }, (_, i) => ({
+      id: String(i + 1),
       status: 'completed' as const,
       image_path: `uploads/${i + 1}.jpg`,
       uploaded_at: new Date(Date.now() - i * 60_000).toISOString(),
       url: `/api/uploads/${i + 1}/photo`,
+      thumbLabel: `Apr 27, ${i}:00 AM`,
     }));
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, manyUploads)),
-    );
+    mocked.mockReturnValue(makeUploadsResult({ uploads: manyUploads }));
 
     renderIndex();
 
     await waitFor(() => {
       const rowLinks = document.querySelectorAll('a[href^="/uploads/"]');
-      expect(rowLinks.length).toBe(10);
+      // 10 upload rows + 1 UploadsLink (/uploads) = filter to /uploads/:id pattern
+      const uploadRowLinks = Array.from(rowLinks).filter(
+        (a) => a.getAttribute('href')?.match(/\/uploads\/\d+$/),
+      );
+      expect(uploadRowLinks.length).toBe(10);
     });
   });
 
   it('renders the wordmark in the header', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, [])),
-    );
-
     renderIndex();
 
     await waitFor(() =>
@@ -257,17 +269,122 @@ describe('Index (MobileHome)', () => {
   });
 
   it('renders a log out button', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(makeResponse(200, MOCK_USER))
-        .mockResolvedValueOnce(makeResponse(200, [])),
-    );
-
     renderIndex();
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /log out/i })).not.toBeNull(),
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // InflightBanner tests
+  // -------------------------------------------------------------------------
+
+  it('does not render InflightBanner when inflightCount is 0', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 0 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText(/hi,\s*testuser/i)).not.toBeNull(),
+    );
+
+    expect(screen.queryByText(/photo.*processing/i)).toBeNull();
+  });
+
+  it('renders InflightBanner with singular text when inflightCount is 1', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 1, longestETA: 45 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText('1 photo processing…')).not.toBeNull(),
+    );
+  });
+
+  it('renders InflightBanner with plural text when inflightCount is 2', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 2, longestETA: 184 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText('2 photos processing…')).not.toBeNull(),
+    );
+  });
+
+  it('InflightBanner shows ETA subtext', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 1, longestETA: 45 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText(/remaining/i)).not.toBeNull(),
+    );
+  });
+
+  it('InflightBanner links to /uploads', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 2, longestETA: 60 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText('2 photos processing…')).not.toBeNull(),
+    );
+
+    const bannerLink = document.querySelector('a[href="/uploads"][data-testid="inflight-banner"]');
+    expect(bannerLink).not.toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // UploadsLink tests
+  // -------------------------------------------------------------------------
+
+  it('always renders UploadsLink', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 0 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText('View all uploads')).not.toBeNull(),
+    );
+  });
+
+  it('UploadsLink links to /uploads', async () => {
+    mocked.mockReturnValue(makeUploadsResult());
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText('View all uploads')).not.toBeNull(),
+    );
+
+    const link = screen.getByText('View all uploads').closest('a');
+    expect(link?.getAttribute('href')).toBe('/uploads');
+  });
+
+  it('UploadsLink has active class when inflightCount > 0', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 2 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText('View all uploads')).not.toBeNull(),
+    );
+
+    const link = screen.getByText('View all uploads').closest('a');
+    expect(link?.className).toMatch(/uploadsLinkActive/);
+  });
+
+  it('UploadsLink does not have active class when inflightCount is 0', async () => {
+    mocked.mockReturnValue(makeUploadsResult({ inflightCount: 0 }));
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText('View all uploads')).not.toBeNull(),
+    );
+
+    const link = screen.getByText('View all uploads').closest('a');
+    expect(link?.className).not.toMatch(/uploadsLinkActive/);
   });
 });

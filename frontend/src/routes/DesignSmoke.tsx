@@ -13,7 +13,74 @@ import { Input } from '../components/Input';
 import { WizardSteps } from '../components/WizardSteps';
 import type { WizardStep } from '../components/WizardSteps';
 import type { FamilyMemberId } from '../lib/family';
+import { Spinner } from '../components/Spinner';
+import { ThumbTile } from '../components/ThumbTile';
+import { SectionRule } from '../components/SectionRule';
+import { Chevron } from '../components/Chevron';
+import { BackChevron } from '../components/BackChevron';
+import { formatETA, formatDuration } from '../lib/eta';
+import { useNewCaptureSheet } from '../components/NewCaptureSheet';
+import { MobileTabBar } from '../components/MobileTabBar';
+import type { TabId } from '../components/MobileTabBar';
+import { InflightRow, QueuedRow, CompletedRow, FailedRow } from './Status';
 import styles from './DesignSmoke.module.css';
+
+// ---------------------------------------------------------------------------
+// Status row preview fixtures
+// ---------------------------------------------------------------------------
+
+const SMOKE_INFLIGHT = {
+  id: 'smoke-1',
+  status: 'processing' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-27T09:00:00Z',
+  thumbLabel: 'Apr 27, 9:00 AM',
+  startedAt: 'Just now',
+  current_stage: 'cell_progress',
+  completed_stages: ['received', 'preprocessing', 'grid_detected', 'model_loading'],
+  cellProgress: 12,
+  totalCells: 35,
+  remaining_seconds: 184,
+  queuedBehind: 0,
+};
+
+const SMOKE_QUEUED = {
+  id: 'smoke-2',
+  status: 'processing' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-27T09:01:00Z',
+  thumbLabel: 'Apr 27, 9:01 AM',
+  startedAt: '8 sec ago',
+  current_stage: 'queued',
+  completed_stages: [] as string[],
+  remaining_seconds: 393,
+  queuedBehind: 1,
+};
+
+const SMOKE_COMPLETED = {
+  id: 'smoke-3',
+  status: 'completed' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-27T07:00:00Z',
+  thumbLabel: 'Apr 27, 7:00 AM',
+  finishedAt: '2 hr ago',
+  found: 14,
+  review: 3,
+  durationSec: 118,
+};
+
+const SMOKE_FAILED = {
+  id: 'smoke-4',
+  status: 'failed' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-26T16:00:00Z',
+  thumbLabel: 'Apr 26, 4:00 PM',
+  error: 'Image too blurry — could not detect grid',
+};
 
 const FAMILY_MEMBERS: FamilyMemberId[] = ['bryant', 'danielle', 'isabella', 'eliana', 'family'];
 
@@ -21,6 +88,7 @@ export function DesignSmoke() {
   const { theme, cycleTheme } = useTheme();
   const [inputValue, setInputValue] = useState('');
   const [pwValue, setPwValue] = useState('');
+  const captureSheet = useNewCaptureSheet();
 
   return (
     <div className={styles.page}>
@@ -277,6 +345,141 @@ export function DesignSmoke() {
               </DesktopShell>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* NewCaptureSheet trigger */}
+      <section className={styles.section} data-testid="new-capture-sheet-section">
+        <h2 className={styles.sectionTitle}>NewCaptureSheet</h2>
+        <div className={styles.row}>
+          <HBtn kind="primary" onClick={captureSheet.open} data-testid="trigger-new-capture-sheet">
+            Trigger New Capture sheet
+          </HBtn>
+          <span className={styles.swatchLabel}>
+            {captureSheet.isOpen ? 'open' : 'closed'}
+          </span>
+        </div>
+      </section>
+
+      {/* MobileTabBar section */}
+      <section className={styles.section} data-testid="mobile-tab-bar-section">
+        <h2 className={styles.sectionTitle}>MobileTabBar</h2>
+        <p className={styles.subtitle}>All 4 active states:</p>
+        <div className={styles.tabBarGrid}>
+          {(['home', 'uploads', 'review', 'calendar'] as TabId[]).map((active) => (
+            <div key={active} className={styles.tabBarPreview}>
+              <span className={styles.swatchLabel}>{active} active</span>
+              <div className={styles.tabBarShell}>
+                <MobileTabBar active={active} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Phase 3.5 primitives section */}
+      <section className={styles.section} data-testid="phase35-section">
+        <h2 className={styles.sectionTitle}>Phase 3.5 Primitives</h2>
+
+        {/* Spinner */}
+        <div className={styles.row} style={{ marginBottom: '1.5rem' }}>
+          {([12, 18, 24] as const).map((size) => (
+            <div key={size} className={styles.swatch}>
+              <Spinner size={size} ariaLabel={`Spinner ${size}px`} />
+              <span className={styles.swatchLabel}>{size}px</span>
+            </div>
+          ))}
+        </div>
+
+        {/* ThumbTile */}
+        <div className={styles.row} style={{ marginBottom: '1.5rem' }}>
+          <div className={styles.swatch}>
+            <ThumbTile />
+            <span className={styles.swatchLabel}>default</span>
+          </div>
+          <div className={styles.swatch}>
+            <ThumbTile accent="var(--accent)">📷</ThumbTile>
+            <span className={styles.swatchLabel}>accent dot</span>
+          </div>
+          <div className={styles.swatch}>
+            <ThumbTile
+              accent="var(--danger)"
+              badge={
+                <span style={{
+                  width: 20, height: 20, borderRadius: 999,
+                  background: 'var(--accent)', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 800, border: '2px solid var(--paper)',
+                  fontFamily: 'var(--fontMono)',
+                }}>1</span>
+              }
+            >
+              📷
+            </ThumbTile>
+            <span className={styles.swatchLabel}>with badge</span>
+          </div>
+        </div>
+
+        {/* SectionRule */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <SectionRule label="In flight" dotColor="var(--accent)" count={2} />
+          <SectionRule label="Done" dotColor="var(--success)" count={5} />
+          <SectionRule label="Couldn't read" dotColor="var(--danger)" count={1} />
+        </div>
+
+        {/* Chevron + BackChevron */}
+        <div className={styles.row} style={{ marginBottom: '1.5rem' }}>
+          <div className={styles.swatch}>
+            <Chevron />
+            <span className={styles.swatchLabel}>Chevron (14px)</span>
+          </div>
+          <div className={styles.swatch}>
+            <Chevron size={20} color="var(--accent)" />
+            <span className={styles.swatchLabel}>Chevron (20px accent)</span>
+          </div>
+          <div className={styles.swatch}>
+            <BackChevron />
+            <span className={styles.swatchLabel}>BackChevron (32px)</span>
+          </div>
+        </div>
+
+        {/* formatETA examples */}
+        <div className={styles.row}>
+          {([null, 0, 45, 184, 3600] as const).map((sec) => (
+            <div key={String(sec)} className={styles.swatch}>
+              <span style={{ fontFamily: 'var(--fontMono)', fontSize: 14, color: 'var(--ink)' }}>
+                {formatETA(sec)}
+              </span>
+              <span className={styles.swatchLabel}>{sec === null ? 'null' : `${sec}s`}</span>
+            </div>
+          ))}
+          {([45, 64, 120, 3661] as const).map((sec) => (
+            <div key={`dur-${sec}`} className={styles.swatch}>
+              <span style={{ fontFamily: 'var(--fontMono)', fontSize: 14, color: 'var(--fgSoft)' }}>
+                {formatDuration(sec)}
+              </span>
+              <span className={styles.swatchLabel}>dur {sec}s</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Status row variants section */}
+      <section className={styles.section} data-testid="status-rows-section">
+        <h2 className={styles.sectionTitle}>Status row variants</h2>
+        <p className={styles.subtitle}>One of each row type as rendered in the Uploads inbox.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
+          <InflightRow upload={SMOKE_INFLIGHT} />
+          <QueuedRow
+            upload={SMOKE_QUEUED}
+            position={2}
+            cancel={() => { /* smoke no-op */ }}
+          />
+          <CompletedRow upload={SMOKE_COMPLETED} />
+          <FailedRow
+            upload={SMOKE_FAILED}
+            retry={() => { /* smoke no-op */ }}
+          />
         </div>
       </section>
     </div>

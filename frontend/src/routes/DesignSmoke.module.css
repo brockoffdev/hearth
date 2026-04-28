@@ -140,3 +140,24 @@
   color: var(--fgSoft);
   font-weight: 500;
 }
+
+/* MobileTabBar showcase grid */
+.tabBarGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.tabBarPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tabBarShell {
+  width: 320px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg);
+}

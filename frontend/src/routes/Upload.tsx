@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import type { JSX } from 'react';
 import { ApiError } from '../lib/api';
@@ -133,9 +133,21 @@ function ErrorView({ message, onRetake }: ErrorViewProps) {
 
 export function Upload(): JSX.Element {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const source = searchParams.get('source');
   const [state, setState] = useState<UIState>({ kind: 'idle' });
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-trigger the matching input on mount based on ?source= query param.
+  // The empty dep array is intentional: we read `source` only once on mount
+  // to open the OS file picker. Re-running on source changes would be wrong.
+  useEffect(() => {
+    if (source === 'camera') cameraInputRef.current?.click();
+    else if (source === 'library') galleryInputRef.current?.click();
+    // No cleanup needed — we just trigger the file picker once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Revoke blob URL when the preview URL changes or the component unmounts.
   // Keying on the URL itself guarantees the closure captures the right value

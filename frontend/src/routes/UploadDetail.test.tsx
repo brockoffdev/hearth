@@ -54,11 +54,12 @@ function makeUploadResponse(
   overrides: Partial<UploadSummary> = {},
 ): UploadSummary {
   return {
-    id: 7,
+    id: '7',
     status: 'processing',
     image_path: 'uploads/7.jpg',
     uploaded_at: '2026-04-27T10:00:00Z',
     url: '/api/uploads/7/photo',
+    thumbLabel: 'Apr 27, 10:00 AM',
     ...overrides,
   };
 }
@@ -77,6 +78,7 @@ function renderDetail(id: string | number = 7) {
         <AuthProvider>
           <Routes>
             <Route path="/uploads/:id" element={<UploadDetail />} />
+            <Route path="/uploads" element={<div data-testid="uploads-page">Uploads</div>} />
             <Route path="/" element={<div data-testid="home-page">Home</div>} />
           </Routes>
         </AuthProvider>
@@ -199,6 +201,8 @@ describe('UploadDetail — processing state', () => {
         stage: 'preprocessing',
         message: null,
         progress: null,
+        completed_stages: ['received'],
+        remaining_seconds: 90,
       });
     });
 
@@ -378,6 +382,204 @@ describe('UploadDetail — SSE error', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/connection lost/i)).toBeInTheDocument();
+    });
+  });
+});
+
+describe('UploadDetail — ETA chip', () => {
+  it('renders ETA in header subtitle when remaining_seconds is in the SSE event', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    const source = MockEventSource.instances[0]!;
+
+    act(() => {
+      source.emit('stage_update', {
+        stage: 'preprocessing',
+        message: null,
+        progress: null,
+        completed_stages: ['received'],
+        remaining_seconds: 184,
+      });
+    });
+
+    await waitFor(() => {
+      // formatETA(184) → "~3 min 4 sec"
+      expect(screen.getByText(/~3 min 4 sec/i)).toBeInTheDocument();
+      expect(screen.getByText(/remaining/i)).toBeInTheDocument();
+    });
+  });
+
+  it('renders "—" as ETA before first SSE event', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    // No SSE events yet — should show default "—"
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  it('renders "total · waiting in queue" copy when currentStage is queued', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse({ status: 'processing' })),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    const source = MockEventSource.instances[0]!;
+
+    act(() => {
+      source.emit('stage_update', {
+        stage: 'queued',
+        message: null,
+        progress: null,
+        completed_stages: [],
+        remaining_seconds: 300,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/waiting in queue/i)).toBeInTheDocument();
+      expect(screen.getByText(/total/i)).toBeInTheDocument();
+    });
+  });
+});
+
+describe('UploadDetail — Continue in background', () => {
+  it('renders the Continue in background button during active processing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    expect(
+      screen.getByRole('button', { name: /continue in background/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('Continue in background button navigates to /uploads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    const { getByRole } = renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    const btn = getByRole('button', { name: /continue in background/i });
+    act(() => btn.click());
+
+    await waitFor(() => {
+      // After navigation the UploadDetail route unmounts; /uploads route would render
+      // but our test renders only /uploads/:id and / routes. The navigate call should
+      // cause the route to change — verify the button is no longer visible.
+      expect(screen.queryByRole('button', { name: /continue in background/i })).toBeNull();
+    });
+  });
+
+  it('Continue in background button is hidden in terminal Done state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse({ status: 'completed' })),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => {
+      expect(screen.getByText(/processing complete/i)).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByRole('button', { name: /continue in background/i }),
+    ).toBeNull();
+  });
+
+  it('Continue in background button is hidden in terminal Failed state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse({ status: 'failed' })),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => {
+      expect(screen.getByText(/processing failed/i)).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByRole('button', { name: /continue in background/i }),
+    ).toBeNull();
+  });
+});
+
+describe('UploadDetail — BackChevron navigation', () => {
+  it('renders the BackChevron button with aria-label "Go back"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
+  });
+
+  it('BackChevron click navigates to /uploads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    const chevron = screen.getByRole('button', { name: /go back/i });
+    act(() => chevron.click());
+
+    await waitFor(() => {
+      // /uploads route is not registered in renderDetail's test router —
+      // verify we left the detail page (component unmounted)
+      expect(screen.queryByRole('button', { name: /go back/i })).toBeNull();
     });
   });
 });

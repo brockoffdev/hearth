@@ -1,0 +1,9 @@
+@keyframes hspin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  animation: hspin 0.9s linear infinite;
+}

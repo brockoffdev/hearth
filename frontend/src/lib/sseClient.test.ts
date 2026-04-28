@@ -135,4 +135,60 @@ describe('subscribeUploadEvents', () => {
 
     expect(onStage).not.toHaveBeenCalled();
   });
+
+  it('passes completed_stages through to onStage', () => {
+    const onStage = vi.fn();
+    subscribeUploadEvents(1, { onStage });
+
+    const source = MockEventSource.instances[0]!;
+    const update: StageUpdate = {
+      stage: 'preprocessing',
+      message: null,
+      progress: null,
+      completed_stages: ['received'],
+      remaining_seconds: 120,
+    };
+    source.emit('stage_update', update);
+
+    expect(onStage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completed_stages: ['received'],
+        remaining_seconds: 120,
+      }),
+    );
+  });
+
+  it('passes remaining_seconds through to onStage', () => {
+    const onStage = vi.fn();
+    subscribeUploadEvents(1, { onStage });
+
+    const source = MockEventSource.instances[0]!;
+    const update: StageUpdate = {
+      stage: 'cell_progress',
+      message: null,
+      progress: { cell: 3, total: 35 },
+      completed_stages: ['received', 'preprocessing', 'grid_detected', 'model_loading'],
+      remaining_seconds: 256,
+    };
+    source.emit('stage_update', update);
+
+    expect(onStage).toHaveBeenCalledWith(
+      expect.objectContaining({ remaining_seconds: 256 }),
+    );
+  });
+
+  it('handles stage_update without optional fields gracefully', () => {
+    const onStage = vi.fn();
+    subscribeUploadEvents(1, { onStage });
+
+    const source = MockEventSource.instances[0]!;
+    // No completed_stages or remaining_seconds — backward-compatible
+    const update = { stage: 'received', message: null, progress: null };
+    source.emit('stage_update', update);
+
+    const received = onStage.mock.calls[0]?.[0] as StageUpdate;
+    expect(received.stage).toBe('received');
+    expect(received.completed_stages).toBeUndefined();
+    expect(received.remaining_seconds).toBeUndefined();
+  });
 });

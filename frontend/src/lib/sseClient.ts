@@ -4,6 +4,8 @@ export interface StageUpdate {
   stage: StageKey;
   message: string | null;
   progress: { cell: number; total: number } | null;
+  completed_stages?: string[];
+  remaining_seconds?: number;
 }
 
 export interface SSEHandlers {

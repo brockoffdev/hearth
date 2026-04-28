@@ -1,15 +1,19 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 import { ThemeProvider } from '../design/ThemeProvider';
+import { NewCaptureSheetProvider } from '../components/NewCaptureSheet';
 import { DesignSmoke } from './DesignSmoke';
+import { formatETA, formatDuration } from '../lib/eta';
 
 
 function renderSmoke() {
   return render(
     <MemoryRouter>
       <ThemeProvider>
-        <DesignSmoke />
+        <NewCaptureSheetProvider>
+          <DesignSmoke />
+        </NewCaptureSheetProvider>
       </ThemeProvider>
     </MemoryRouter>
   );
@@ -113,5 +117,121 @@ describe('DesignSmoke route', () => {
     renderSmoke();
     const toggleBtn = screen.getByText(/— click to cycle/);
     expect(toggleBtn).not.toBeNull();
+  });
+});
+
+describe('DesignSmoke — Phase 3.5 primitives section', () => {
+  it('renders the Phase 3.5 primitives section', () => {
+    const { container } = renderSmoke();
+    const section = container.querySelector('[data-testid="phase35-section"]');
+    expect(section).not.toBeNull();
+  });
+
+  it('renders Spinner elements at 3 sizes', () => {
+    renderSmoke();
+    expect(screen.getByRole('img', { name: 'Spinner 12px' })).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'Spinner 18px' })).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'Spinner 24px' })).not.toBeNull();
+  });
+
+  it('renders ThumbTile variants', () => {
+    renderSmoke();
+    expect(screen.getByText('default')).not.toBeNull();
+    expect(screen.getByText('accent dot')).not.toBeNull();
+    expect(screen.getByText('with badge')).not.toBeNull();
+  });
+
+  it('renders SectionRule with 3 status labels', () => {
+    renderSmoke();
+    expect(screen.getByText('In flight')).not.toBeNull();
+    expect(screen.getByText('Done')).not.toBeNull();
+    expect(screen.getByText("Couldn't read")).not.toBeNull();
+  });
+
+  it('renders formatETA examples', () => {
+    renderSmoke();
+    // null → '—'
+    expect(screen.getByText('—')).not.toBeNull();
+    // 45 → '~45 sec'
+    expect(screen.getByText(formatETA(45))).not.toBeNull();
+    // 184 → '~3 min 4 sec' — may appear multiple times (ETA section + Status row preview)
+    expect(screen.getAllByText(formatETA(184)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders formatDuration examples', () => {
+    renderSmoke();
+    expect(screen.getByText(formatDuration(64))).not.toBeNull();
+    expect(screen.getByText(formatDuration(120))).not.toBeNull();
+  });
+});
+
+describe('DesignSmoke — MobileTabBar section', () => {
+  it('renders the MobileTabBar section', () => {
+    const { container } = renderSmoke();
+    const section = container.querySelector('[data-testid="mobile-tab-bar-section"]');
+    expect(section).not.toBeNull();
+  });
+
+  it('renders 4 nav elements (one per active state)', () => {
+    const { container } = renderSmoke();
+    const navs = container.querySelectorAll('nav[aria-label="Primary"]');
+    expect(navs.length).toBe(4);
+  });
+
+  it('each active state has exactly one data-active="true" link', () => {
+    const { container } = renderSmoke();
+    const navs = container.querySelectorAll('nav[aria-label="Primary"]');
+    navs.forEach((nav) => {
+      const activeLinks = nav.querySelectorAll('a[data-active="true"]');
+      expect(activeLinks.length).toBe(1);
+    });
+  });
+});
+
+describe('DesignSmoke — Status row variants section', () => {
+  it('renders the status-rows-section', () => {
+    const { container } = renderSmoke();
+    expect(container.querySelector('[data-testid="status-rows-section"]')).not.toBeNull();
+  });
+
+  it('renders the "Status row variants" section title', () => {
+    renderSmoke();
+    expect(screen.getByText('Status row variants')).not.toBeNull();
+  });
+
+  it('renders an InflightRow with cell_progress stage label', () => {
+    renderSmoke();
+    expect(screen.getByText(/reading cells · 12 of 35/i)).not.toBeNull();
+  });
+
+  it('renders a QueuedRow with "Waiting · 1 photo ahead"', () => {
+    renderSmoke();
+    expect(screen.getByText(/waiting · 1 photo ahead/i)).not.toBeNull();
+  });
+
+  it('renders a CompletedRow with events found', () => {
+    renderSmoke();
+    expect(screen.getByText(/14 events found/i)).not.toBeNull();
+  });
+
+  it('renders a FailedRow with "Couldn\'t read this one"', () => {
+    renderSmoke();
+    expect(screen.getByText(/couldn't read this one/i)).not.toBeNull();
+  });
+});
+
+describe('DesignSmoke — NewCaptureSheet trigger', () => {
+  it('renders the "Trigger New Capture sheet" button in the NewCaptureSheet section', () => {
+    const { container } = renderSmoke();
+    const section = container.querySelector('[data-testid="new-capture-sheet-section"]');
+    expect(section).not.toBeNull();
+    expect(screen.getByRole('button', { name: /trigger new capture sheet/i })).not.toBeNull();
+  });
+
+  it('clicking the trigger opens the capture sheet dialog', () => {
+    renderSmoke();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /trigger new capture sheet/i }));
+    expect(screen.getByRole('dialog')).not.toBeNull();
   });
 });
