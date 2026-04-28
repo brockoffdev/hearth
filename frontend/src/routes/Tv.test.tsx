@@ -289,8 +289,16 @@ describe('Tv', () => {
 
     expect(screen.getByTestId('stale-banner')).toBeDefined();
 
-    // Next fetch succeeds — banner should disappear.
+    // Next two fetches succeed — banner clears only after sustained recovery.
     vi.mocked(tvModule.getTvSnapshot).mockResolvedValue(snap);
+
+    await act(async () => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // After one healthy poll the watermark hasn't cleared yet.
+    expect(screen.getByTestId('stale-banner')).toBeDefined();
 
     await act(async () => {
       vi.advanceTimersByTime(5 * 60 * 1000);

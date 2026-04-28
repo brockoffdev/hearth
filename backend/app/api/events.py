@@ -466,6 +466,11 @@ async def republish_event(
     Unlike PATCH, this path is only valid for pending_review events and clears
     the auto-publish failure breadcrumb from notes on success so the row looks
     clean without requiring an edit.
+
+    Concurrent calls for the same event are last-write-wins: each goroutine
+    passes the status guard, both call publish_event with identical bodies, and
+    GCal absorbs the second insert via the existing extendedProperty linkage.
+    No row-level lock is taken — at family scale the race is benign.
     """
     event = await _fetch_event_or_404(event_id, db)
     await _check_event_access(event, current_user, db)

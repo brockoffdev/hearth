@@ -70,6 +70,7 @@ function useTvSnapshot(): {
   const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
   const [firstStaleAt, setFirstStaleAt] = useState<Date | null>(null);
+  const [consecutiveHealthyFetches, setConsecutiveHealthyFetches] = useState(0);
 
   const doFetch = useCallback(async () => {
     try {
@@ -77,8 +78,10 @@ function useTvSnapshot(): {
       setSnapshot(data);
       setLastFetchedAt(Date.now());
       setFetchFailed(false);
+      setConsecutiveHealthyFetches((n) => n + 1);
     } catch {
       setFetchFailed(true);
+      setConsecutiveHealthyFetches(0);
     }
   }, []);
 
@@ -93,13 +96,21 @@ function useTvSnapshot(): {
     (lastFetchedAt !== null && Date.now() - lastFetchedAt > STALE_THRESHOLD_MS);
 
   // Track when staleness first started so we can show an extended-stale banner.
+  // We require sustained recovery (≥ 2 consecutive healthy fetches) before
+  // clearing firstStaleAt — a single lucky poll mid-outage shouldn't hide it.
   useEffect(() => {
-    if (isStale && firstStaleAt === null) {
-      setFirstStaleAt(new Date());
-    } else if (!isStale && firstStaleAt !== null) {
+    if (isStale) {
+      if (firstStaleAt === null) setFirstStaleAt(new Date());
+      // Reset healthy streak on any stale tick.
+      if (consecutiveHealthyFetches !== 0) setConsecutiveHealthyFetches(0);
+      return;
+    }
+    // isStale is false here.  Clear firstStaleAt only after the healthy
+    // streak crosses the threshold; otherwise leave the watermark in place.
+    if (firstStaleAt !== null && consecutiveHealthyFetches >= 2) {
       setFirstStaleAt(null);
     }
-  }, [isStale, firstStaleAt]);
+  }, [isStale, firstStaleAt, consecutiveHealthyFetches]);
 
   return { snapshot, lastFetchedAt, isStale, firstStaleAt };
 }
