@@ -12,6 +12,27 @@ import { AuthProvider } from '../auth/AuthProvider';
 import { Upload } from './Upload';
 
 // ---------------------------------------------------------------------------
+// Helper for rendering with a specific URL (including ?source=)
+// ---------------------------------------------------------------------------
+
+function renderUploadWithSource(source?: string) {
+  const url = source ? `/upload?source=${source}` : '/upload';
+  return render(
+    <MemoryRouter initialEntries={[url]}>
+      <ThemeProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/upload" element={<Upload />} />
+            <Route path="/" element={<div data-testid="home-page">Home</div>} />
+            <Route path="/uploads/:id" element={<div data-testid="processing-page">Processing</div>} />
+          </Routes>
+        </AuthProvider>
+      </ThemeProvider>
+    </MemoryRouter>,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -331,5 +352,62 @@ describe('Upload route — submit flow', () => {
     );
     expect(screen.getByText(/file too large/i)).not.toBeNull();
     expect(screen.queryByTestId('processing-page')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ?source= query param auto-trigger tests
+// ---------------------------------------------------------------------------
+
+describe('Upload route — ?source= query param', () => {
+  it('mounting with ?source=camera triggers click() on the camera input', async () => {
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+
+    renderUploadWithSource('camera');
+
+    // Wait for mount effects to flush
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /take a photo/i })).not.toBeNull(),
+    );
+
+    // The camera input has capture="environment"; only that input should be clicked
+    const cameraInput = document.querySelector('input[capture="environment"]') as HTMLInputElement;
+    expect(cameraInput).not.toBeNull();
+    expect(clickSpy).toHaveBeenCalledOnce();
+
+    clickSpy.mockRestore();
+  });
+
+  it('mounting with ?source=library triggers click() on the gallery input', async () => {
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+
+    renderUploadWithSource('library');
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /take a photo/i })).not.toBeNull(),
+    );
+
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const galleryInput = Array.from(inputs).find(
+      (el) => !(el as HTMLInputElement).hasAttribute('capture'),
+    ) as HTMLInputElement;
+    expect(galleryInput).not.toBeNull();
+    expect(clickSpy).toHaveBeenCalledOnce();
+
+    clickSpy.mockRestore();
+  });
+
+  it('mounting without ?source does not trigger any click()', async () => {
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+
+    renderUploadWithSource();
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /take a photo/i })).not.toBeNull(),
+    );
+
+    expect(clickSpy).not.toHaveBeenCalled();
+
+    clickSpy.mockRestore();
   });
 });
