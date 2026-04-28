@@ -1,19 +1,20 @@
 """Upload API endpoints — Phase 3 Task A + B + Phase 3.5.
 
 Routes:
-  POST   /api/uploads               — accept a multipart photo upload
-  GET    /api/uploads               — list current user's uploads (most recent first)
-  GET    /api/uploads/{id}          — single upload metadata
-  GET    /api/uploads/{id}/photo    — raw photo bytes
-  GET    /api/uploads/{id}/events   — SSE stream of pipeline stage events
+  POST   /api/uploads                    — accept a multipart photo upload
+  GET    /api/uploads                    — list current user's uploads (most recent first)
+  GET    /api/uploads/{id}              — single upload metadata
+  GET    /api/uploads/{id}/photo        — raw photo bytes
+  GET    /api/uploads/{id}/events       — SSE stream of pipeline stage events
+  DELETE /api/uploads/{id}              — cancel a queued upload (removes row + file)
+  POST   /api/uploads/{id}/retry        — retry a failed upload (creates new row)
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
-import time
 from collections.abc import AsyncGenerator
-from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -27,17 +28,27 @@ from sse_starlette.sse import EventSourceResponse
 
 from backend.app.auth.dependencies import require_user
 from backend.app.config import Settings, get_settings
-from backend.app.db.base import get_db
-from backend.app.db.models import PipelineStageDuration, Upload, User
+from backend.app.db.base import get_db, get_session_factory
+from backend.app.db.models import Upload, User
 from backend.app.uploads.friendly_time import (
     format_relative_finished_at,
     format_relative_started_at,
     format_thumb_label,
 )
-from backend.app.uploads.pipeline import estimate_remaining_seconds, run_fake_pipeline
+from backend.app.uploads.pipeline import (
+    STAGE_MEDIAN_SECONDS,
+    estimate_remaining_seconds,
+    queue_wait_seconds_simple,
+)
+from backend.app.uploads.queue import dequeue, enqueue, queue_position
+from backend.app.uploads.runner import run_pipeline_for_upload
 from backend.app.uploads.storage import read_photo, store_photo
 
 router = APIRouter()
+
+# Strong references to running pipeline tasks.  Without this, the GC could
+# collect a Task before it finishes (Python only keeps weak refs to Tasks).
+_background_tasks: set[asyncio.Task[None]] = set()
 
 # Map stored file extension → media type returned in photo responses.
 _EXT_TO_MEDIA_TYPE: dict[str, str] = {
@@ -49,6 +60,10 @@ _EXT_TO_MEDIA_TYPE: dict[str, str] = {
 }
 
 _LIST_LIMIT = 50
+
+# Full pipeline median — used for queue-wait ETA calculation.
+# Computed by pipeline.py; kept here as an alias for _queue_wait_seconds below.
+_FULL_PIPELINE_MEDIAN_SECONDS: int = round(sum(STAGE_MEDIAN_SECONDS.values()))
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +123,24 @@ def _row_status_to_api(
 
 
 # ---------------------------------------------------------------------------
+# Queue-wait ETA helper
+# ---------------------------------------------------------------------------
+
+
+def _queue_wait_seconds(upload_id: int) -> int:
+    """Upper-bound queue-wait ETA for *upload_id*.
+
+    Delegates to queue_wait_seconds_simple from pipeline.py (position x
+    full-pipeline median).  Returns 0 if the upload is not in the queue or
+    is at the head.
+    """
+    pos = queue_position(upload_id)
+    if pos is None or pos == 0:
+        return 0
+    return queue_wait_seconds_simple(pos)
+
+
+# ---------------------------------------------------------------------------
 # Response builder
 # ---------------------------------------------------------------------------
 
@@ -123,7 +156,7 @@ def _to_response(
     Args:
         upload: The Upload row to serialize.
         queued_behind: Number of pipelines ahead in the queue (0 = running now).
-            Task B will compute this; Task A passes None for now.
+            When None, the queue position is looked up live.
         now: Override the current time (used in tests for deterministic output).
     """
     now = now or datetime.now(UTC)
@@ -138,6 +171,17 @@ def _to_response(
         now = now.replace(tzinfo=None)
 
     completed_stages = json.loads(upload.completed_stages) if upload.completed_stages else []
+
+    # Compute queue wait for ETA when processing.
+    if is_processing and queued_behind is None:
+        queued_behind = queue_position(upload.id)
+
+    pipeline_eta = estimate_remaining_seconds(completed_stages) if is_processing else None
+    if is_processing and pipeline_eta is not None:
+        queue_wait = _queue_wait_seconds(upload.id) if upload.id is not None else 0
+        remaining = pipeline_eta + queue_wait
+    else:
+        remaining = None
 
     return UploadResponse.model_validate(
         {
@@ -160,9 +204,7 @@ def _to_response(
             "completed_stages": completed_stages if is_processing else None,
             "cellProgress": upload.cell_progress if is_processing else None,
             "totalCells": upload.total_cells if is_processing else None,
-            "remaining_seconds": (
-                estimate_remaining_seconds(completed_stages) if is_processing else None
-            ),
+            "remaining_seconds": remaining,
             "queuedBehind": queued_behind if is_processing else None,
             # completed fields
             "durationSec": (
@@ -191,7 +233,8 @@ async def create_upload(
     current_user: User = Depends(require_user),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, object]:
-    """Accept a multipart photo upload; store it; create an Upload row."""
+    """Accept a multipart photo upload; store it; create a queued Upload row;
+    dispatch the pipeline runner as a background asyncio.Task."""
     content_type = photo.content_type or ""
     if not content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are supported")
@@ -210,12 +253,32 @@ async def create_upload(
         user_id=current_user.id,
         image_path=rel_path,
         status="queued",
+        current_stage="queued",
         completed_stages="[]",
     )
     db.add(upload)
     await db.commit()
     await db.refresh(upload)
-    return _to_response(upload).model_dump(by_alias=True)
+
+    # Enqueue THEN dispatch.  enqueue must happen before create_task so that
+    # queue_position() returns the correct value inside _to_response().
+    await enqueue(upload.id)
+
+    if settings.dispatch_runner_on_create_upload:
+        factory = get_session_factory()
+        _task = asyncio.create_task(
+            run_pipeline_for_upload(
+                upload.id,
+                factory,
+                stage_delay_seconds=settings.pipeline_stage_delay_seconds,
+                cell_delay_seconds=settings.pipeline_cell_delay_seconds,
+            )
+        )
+        _background_tasks.add(_task)
+        _task.add_done_callback(_background_tasks.discard)
+
+    pos = queue_position(upload.id)
+    return _to_response(upload, queued_behind=pos).model_dump(by_alias=True)
 
 
 @router.get("")
@@ -268,7 +331,7 @@ async def get_upload_photo(
 
 
 # ---------------------------------------------------------------------------
-# SSE endpoint
+# SSE endpoint — polling reader (Phase 3.5 lightweight implementation)
 # ---------------------------------------------------------------------------
 
 
@@ -282,16 +345,18 @@ async def stream_upload_events(
 ) -> EventSourceResponse:
     """Stream SSE events for the upload's processing pipeline.
 
+    **Phase 3.5 implementation:** the pipeline runner is dispatched as an
+    asyncio.Task at POST time (decoupled from this endpoint).  This handler
+    polls the Upload row every 0.5 s and emits a ``stage_update`` event
+    whenever the row's state key changes.
+
+    The polling model trades ~0.5 s latency for simplicity.  Given the fake
+    pipeline's per-stage delay of 1.5 s the latency is imperceptible.  Phase 5
+    may replace polling with a pub/sub channel if sub-second latency matters.
+
     Emits ``stage_update`` named events.  Each event's data is a JSON object
-    with keys ``stage``, ``message``, ``progress``, ``completed_stages``, and
+    with keys: ``stage``, ``message``, ``progress``, ``completed_stages``,
     ``remaining_seconds``.
-
-    During streaming, the Upload row's ``current_stage``, ``completed_stages``,
-    ``cell_progress``, and ``total_cells`` fields are updated on each stage
-    transition so concurrent GET requests see live progress.
-
-    Per-stage durations are recorded to ``pipeline_stage_durations`` on each
-    stage transition for future ETA calibration (Phase 4+).
 
     If the upload is already completed or failed, a single ``done`` event is
     emitted immediately and the connection closes.
@@ -299,7 +364,7 @@ async def stream_upload_events(
     upload = await _fetch_upload_or_404(upload_id, db)
     _check_access(upload, current_user)
 
-    # Short-circuit if already terminal — don't re-run the pipeline.
+    # Short-circuit if already terminal — don't wait for anything.
     if upload.status in ("completed", "failed"):
         async def _already_done() -> AsyncGenerator[dict[str, str], None]:
             payload = {"stage": "done", "message": "already-complete", "progress": None}
@@ -307,85 +372,179 @@ async def stream_upload_events(
 
         return EventSourceResponse(_already_done())
 
-    # Transition status to processing before emitting the first event so that
-    # GET /api/uploads/{id} reflects the in-flight state immediately.
-    upload.status = "processing"
+    # Polling SSE generator — reads DB state every 0.5 s.
+    async def _poll_generator() -> AsyncGenerator[dict[str, str], None]:
+        # (status, current_stage, cell_progress, total_cells, completed_stages_len)
+        last_state_key: tuple[object, ...] | None = None
+
+        # Use a fresh session for each poll to avoid stale reads.
+        factory = get_session_factory()
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            async with factory() as session:
+                row = await session.get(Upload, upload_id)
+
+            if row is None:
+                break
+
+            completed = json.loads(row.completed_stages) if row.completed_stages else []
+            state_key = (
+                row.status,
+                row.current_stage,
+                row.cell_progress,
+                row.total_cells,
+                len(completed),
+            )
+
+            if state_key != last_state_key:
+                last_state_key = state_key
+
+                # Build the event payload.
+                stage = row.current_stage or "queued"
+                remaining = (
+                    estimate_remaining_seconds(completed)
+                    + _queue_wait_seconds(upload_id)
+                )
+                progress_payload = (
+                    {"cell": row.cell_progress, "total": row.total_cells}
+                    if row.cell_progress is not None
+                    else None
+                )
+                payload = {
+                    "stage": stage,
+                    "message": None,
+                    "progress": progress_payload,
+                    "completed_stages": completed,
+                    "remaining_seconds": remaining,
+                }
+                yield {"event": "stage_update", "data": json.dumps(payload)}
+
+                # Terminal states: emit a final 'done' event then close.
+                if row.status in ("completed", "failed"):
+                    done_message = "completed" if row.status == "completed" else "failed"
+                    yield {
+                        "event": "stage_update",
+                        "data": json.dumps({
+                            "stage": "done",
+                            "message": done_message,
+                            "progress": None,
+                            "completed_stages": completed,
+                            "remaining_seconds": 0,
+                        }),
+                    }
+                    break
+
+            await asyncio.sleep(0.5)
+
+    return EventSourceResponse(_poll_generator())
+
+
+# ---------------------------------------------------------------------------
+# Cancel endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/{upload_id}", status_code=204)
+async def cancel_upload(
+    upload_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Cancel a queued upload.
+
+    Removes the upload from the process-wide queue, deletes the stored photo
+    file, and deletes the DB row.  Only queued uploads can be cancelled;
+    in-progress uploads are not user-cancellable in Phase 3.5.
+
+    Returns 204 No Content on success.
+    """
+    upload = await _fetch_upload_or_404(upload_id, db)
+    _check_access(upload, current_user)
+
+    if upload.status != "queued":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only queued uploads can be cancelled. "
+                "Running uploads are not user-cancellable."
+            ),
+        )
+
+    # Remove from the process-wide queue first so the runner (if it wakes up)
+    # sees no queue entry and aborts.
+    await dequeue(upload.id)
+
+    # Delete the stored photo file.
+    file_path = settings.data_dir / upload.image_path
+    try:
+        await asyncio.to_thread(file_path.unlink, missing_ok=True)
+    except OSError:
+        pass  # log-worthy but never fail the cancel request
+
+    # Delete the DB row (cancel means "this never happened").
+    await db.delete(upload)
     await db.commit()
-    await db.refresh(upload)
+    return None
 
-    async def _event_generator() -> AsyncGenerator[dict[str, str], None]:
-        saw_done = False
-        stage_start: dict[str, float] = {}
-        prev_stage: str | None = None
 
-        try:
-            pipeline = run_fake_pipeline(
-                upload_id,
+# ---------------------------------------------------------------------------
+# Retry endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{upload_id}/retry", status_code=201)
+async def retry_upload(
+    upload_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    """Retry a failed upload by creating a new Upload row.
+
+    The original failed row is preserved as evidence (different id).  The new
+    row shares the same photo file (content-addressed storage means the bytes
+    are already on disk under the same path).
+
+    Returns 201 with the new Upload row's UploadResponse.
+    """
+    failed = await _fetch_upload_or_404(upload_id, db)
+    _check_access(failed, current_user)
+
+    if failed.status != "failed":
+        raise HTTPException(status_code=400, detail="Only failed uploads can be retried")
+
+    new_upload = Upload(
+        user_id=failed.user_id,
+        image_path=failed.image_path,  # share the content-addressed photo file
+        status="queued",
+        current_stage="queued",
+        completed_stages="[]",
+    )
+    db.add(new_upload)
+    await db.commit()
+    await db.refresh(new_upload)
+
+    await enqueue(new_upload.id)
+
+    if settings.dispatch_runner_on_create_upload:
+        factory = get_session_factory()
+        _task = asyncio.create_task(
+            run_pipeline_for_upload(
+                new_upload.id,
+                factory,
                 stage_delay_seconds=settings.pipeline_stage_delay_seconds,
                 cell_delay_seconds=settings.pipeline_cell_delay_seconds,
             )
-            async for stage_event in pipeline:
-                if await request.is_disconnected():
-                    # Client disconnected mid-stream — abort without updating DB.
-                    return
+        )
+        _background_tasks.add(_task)
+        _task.add_done_callback(_background_tasks.discard)
 
-                now_mono = time.monotonic()
-
-                # Track stage transitions: record duration for the previous stage.
-                if prev_stage is not None and prev_stage != stage_event.stage:
-                    duration = now_mono - stage_start[prev_stage]
-                    db.add(
-                        PipelineStageDuration(
-                            upload_id=upload.id,
-                            stage=prev_stage,
-                            duration_seconds=duration,
-                        )
-                    )
-
-                if stage_event.stage not in stage_start:
-                    stage_start[stage_event.stage] = now_mono
-
-                # Persist progress to the Upload row.
-                upload.current_stage = stage_event.stage
-                upload.completed_stages = json.dumps(stage_event.completed_stages or [])
-                if stage_event.progress:
-                    upload.cell_progress = stage_event.progress["cell"]
-                    upload.total_cells = stage_event.progress["total"]
-
-                await db.commit()
-
-                # Emit the event to the client.
-                yield {
-                    "event": "stage_update",
-                    "data": json.dumps(asdict(stage_event)),
-                }
-
-                prev_stage = stage_event.stage
-
-                if stage_event.stage == "done":
-                    saw_done = True
-                    break
-
-        finally:
-            if saw_done and not await request.is_disconnected():
-                # Record duration for the final stage.
-                if prev_stage and prev_stage in stage_start:
-                    duration = time.monotonic() - stage_start[prev_stage]
-                    db.add(
-                        PipelineStageDuration(
-                            upload_id=upload.id,
-                            stage=prev_stage,
-                            duration_seconds=duration,
-                        )
-                    )
-
-                # Mark the upload as completed only if the pipeline ran to done.
-                upload.status = "completed"
-                upload.finished_at = datetime.now(tz=UTC)
-                upload.provider = "fake-pipeline-phase-3"
-                await db.commit()
-
-    return EventSourceResponse(_event_generator())
+    pos = queue_position(new_upload.id)
+    return _to_response(new_upload, queued_behind=pos).model_dump(by_alias=True)
 
 
 # ---------------------------------------------------------------------------

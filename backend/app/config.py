@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     # Seconds to pause between individual cell events during cell_progress.
     pipeline_cell_delay_seconds: float = 0.15
 
+    # When True, dispatch an asyncio.Task to run the pipeline immediately after
+    # POST /api/uploads (or POST /api/uploads/{id}/retry) creates a queued row.
+    # Set HEARTH_DISPATCH_RUNNER_ON_CREATE_UPLOAD=false in tests so the runner
+    # is never auto-fired; tests that need pipeline behaviour call
+    # run_pipeline_for_upload() directly for deterministic sequencing.
+    dispatch_runner_on_create_upload: bool = True
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).

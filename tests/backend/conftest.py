@@ -16,6 +16,10 @@ os.environ.setdefault("HEARTH_RUN_MIGRATIONS_ON_STARTUP", "false")
 os.environ.setdefault("HEARTH_BOOTSTRAP_ADMIN_ON_STARTUP", "false")
 # Fixed test secret for session cookies — NEVER use this value in production.
 os.environ.setdefault("HEARTH_SESSION_SECRET", "test-secret-do-not-use-in-prod")
+# Disable automatic pipeline dispatch on POST /api/uploads in tests.  Tests that
+# need pipeline behaviour call run_pipeline_for_upload() directly so they can
+# control timing precisely.
+os.environ.setdefault("HEARTH_DISPATCH_RUNNER_ON_CREATE_UPLOAD", "false")
 
 from collections.abc import AsyncGenerator
 from pathlib import Path

@@ -1,8 +1,23 @@
 """Tests for the SSE /api/uploads/{id}/events endpoint.
 
-Uses httpx streaming to consume raw SSE text and a tiny inline parser.
-Pipeline delays are zeroed via environment variable overrides so the tests
-run instantly.
+Phase 3.5 architectural change: the pipeline runner is now an asyncio.Task
+dispatched at POST /api/uploads time (decoupled from SSE).  The SSE endpoint
+polls the Upload DB row every 0.5 s and emits events when state changes.
+
+The old model (SSE drives the pipeline) no longer exists.  Tests in this file
+verify the *polling reader* behaviour:
+  - Events are emitted as the runner advances stages.
+  - The terminal 'done' event closes the stream.
+  - Auth / access-control paths still work.
+  - Already-completed uploads short-circuit immediately.
+
+Strategy: pipeline delays are set to 0 via env vars so the asyncio.Task
+dispatched at POST time completes very quickly.  The SSE poll interval remains
+at its default (0.5 s) so tests may take up to ~1.5 s each; this is acceptable
+for the test suite.
+
+Queue state is a process-level singleton — reset_queue fixture clears it
+between tests to avoid leakage.
 """
 
 from __future__ import annotations
@@ -23,6 +38,7 @@ from backend.app.db.base import get_session_factory
 from backend.app.db.models import PipelineStageDuration, Upload, User
 from backend.app.main import create_app
 from backend.app.uploads.pipeline import FAKE_TOTAL_CELLS, HEARTH_STAGES_ORDER
+from backend.app.uploads.queue import _reset_for_tests
 
 # ---------------------------------------------------------------------------
 # Minimal fake JPEG bytes (same as test_uploads_endpoints.py)
@@ -87,6 +103,12 @@ def reset_sse_app_status() -> None:
     AppStatus.should_exit_event = None
 
 
+@pytest.fixture(autouse=True)
+def reset_queue() -> None:
+    """Clear process-wide queue state before each test."""
+    _reset_for_tests()
+
+
 @pytest.fixture
 async def client(
     db_engine: AsyncEngine,
@@ -94,10 +116,17 @@ async def client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncClient:
     """AsyncClient backed by a fresh app with isolated DB, temp data dir, and
-    zero pipeline delays."""
+    zero pipeline delays.
+
+    SSE tests re-enable automatic pipeline dispatch (conftest disables it by
+    default so unit tests don't auto-fire runners).  Zero delays make the
+    asyncio.Task complete before the SSE poll loop has to wait long.
+    """
     monkeypatch.setenv("HEARTH_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("HEARTH_PIPELINE_STAGE_DELAY_SECONDS", "0")
     monkeypatch.setenv("HEARTH_PIPELINE_CELL_DELAY_SECONDS", "0")
+    # Re-enable auto-dispatch so POST /api/uploads fires the pipeline runner.
+    monkeypatch.setenv("HEARTH_DISPATCH_RUNNER_ON_CREATE_UPLOAD", "true")
     get_settings.cache_clear()
     app = create_app()
     transport = ASGITransport(app=app)
@@ -169,10 +198,21 @@ async def _post_upload(ac: AsyncClient) -> int:
 # ---------------------------------------------------------------------------
 
 
-async def test_sse_stream_emits_all_10_stages_in_order(
+async def test_sse_stream_emits_stages_and_done(
     bootstrapped_client: AsyncClient,
 ) -> None:
-    """Connect to SSE; consume all events; verify stage sequence."""
+    """SSE polling emits stage events and closes with a 'done' event.
+
+    Phase 3.5 polling model: each poll emits an event when state changes.
+    The runner (asyncio.Task with 0-delay) completes quickly; the SSE poller
+    picks up each transition and emits a 'stage_update' event ending with
+    stage='done'.
+
+    We verify:
+      - At least one non-done stage event is emitted.
+      - The final event has stage='done'.
+      - All event names are 'stage_update'.
+    """
     async with bootstrapped_client as ac:
         await _login_admin(ac)
         upload_id = await _post_upload(ac)
@@ -181,27 +221,21 @@ async def test_sse_stream_emits_all_10_stages_in_order(
             assert resp.status_code == 200
             events = await _read_sse_events(resp)
 
-    stage_sequence = [json.loads(e["data"])["stage"] for e in events if "data" in e]
+    assert len(events) >= 2, f"Expected at least 2 events, got {len(events)}"
 
-    expected = [
-        "received",
-        "preprocessing",
-        "grid_detected",
-        "model_loading",
-        *["cell_progress"] * FAKE_TOTAL_CELLS,
-        "color_matching",
-        "date_normalization",
-        "confidence_gating",
-        "publishing",
-        "done",
-    ]
-    assert stage_sequence == expected
+    # Last event should be 'done'.
+    last_payload = json.loads(events[-1]["data"])
+    assert last_payload["stage"] == "done", f"Last stage was: {last_payload['stage']}"
+
+    # All events must be stage_update.
+    for ev in events:
+        assert ev.get("event") == "stage_update", f"Unexpected event type: {ev}"
 
 
-async def test_sse_cell_progress_carries_cell_total_payload(
+async def test_sse_stream_events_include_completed_stages_and_remaining_seconds(
     bootstrapped_client: AsyncClient,
 ) -> None:
-    """Each cell_progress event has progress={"cell": n, "total": 35}."""
+    """Every polled event carries completed_stages list and remaining_seconds ETA."""
     async with bootstrapped_client as ac:
         await _login_admin(ac)
         upload_id = await _post_upload(ac)
@@ -210,35 +244,29 @@ async def test_sse_cell_progress_carries_cell_total_payload(
             assert resp.status_code == 200
             events = await _read_sse_events(resp)
 
-    cell_events = [
-        json.loads(e["data"])
-        for e in events
-        if "data" in e and json.loads(e["data"])["stage"] == "cell_progress"
-    ]
+    payloads = [json.loads(e["data"]) for e in events if "data" in e]
 
-    assert len(cell_events) == FAKE_TOTAL_CELLS
-    for n, ev in enumerate(cell_events, start=1):
-        assert ev["progress"] == {"cell": n, "total": FAKE_TOTAL_CELLS}, (
-            f"cell_progress event {n} had unexpected payload: {ev['progress']}"
+    for payload in payloads:
+        assert "completed_stages" in payload, (
+            f"missing completed_stages on stage '{payload.get('stage')}'"
         )
+        assert "remaining_seconds" in payload, (
+            f"missing remaining_seconds on stage '{payload.get('stage')}'"
+        )
+        if payload["remaining_seconds"] is not None:
+            assert payload["remaining_seconds"] >= 0
 
 
-async def test_sse_updates_upload_status_to_processing_then_completed(
+async def test_sse_updates_upload_status_to_completed(
     bootstrapped_client: AsyncClient,
     db_engine: AsyncEngine,
 ) -> None:
-    """Upload row transitions queued → processing → completed after SSE stream."""
+    """After consuming the full SSE stream, the Upload row is completed."""
     factory = get_session_factory(db_engine)
 
     async with bootstrapped_client as ac:
         await _login_admin(ac)
         upload_id = await _post_upload(ac)
-
-        # Verify initial status is queued.
-        async with factory() as session:
-            result = await session.execute(select(Upload).where(Upload.id == upload_id))
-            row = result.scalar_one()
-        assert row.status == "queued"
 
         # Consume the full SSE stream.
         async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
@@ -252,7 +280,8 @@ async def test_sse_updates_upload_status_to_processing_then_completed(
 
     assert row.status == "completed"
     assert row.finished_at is not None
-    assert row.provider == "fake-pipeline-phase-3"
+    # Phase 3.5 runner sets this provider string.
+    assert row.provider == "fake-pipeline-phase-3p5"
 
 
 async def test_sse_404_for_unknown_upload(
@@ -300,23 +329,33 @@ async def test_sse_already_completed_emits_done_immediately(
     bootstrapped_client: AsyncClient,
     db_engine: AsyncEngine,
 ) -> None:
-    """If the upload is already completed, a single done event is emitted."""
+    """If the upload is already completed, a single done event is emitted.
+
+    We patch run_pipeline_for_upload to a no-op so the background runner task
+    does not race with the manual status update below.
+    """
+    from unittest.mock import patch
+
     factory = get_session_factory(db_engine)
 
-    async with bootstrapped_client as ac:
-        await _login_admin(ac)
-        upload_id = await _post_upload(ac)
+    async def _noop(*args: object, **kwargs: object) -> None:
+        pass
 
-        # Manually mark the upload as completed.
-        async with factory() as session:
-            result = await session.execute(select(Upload).where(Upload.id == upload_id))
-            row = result.scalar_one()
-            row.status = "completed"
-            await session.commit()
+    with patch("backend.app.api.uploads.run_pipeline_for_upload", _noop):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            upload_id = await _post_upload(ac)
 
-        async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
-            assert resp.status_code == 200
-            events = await _read_sse_events(resp)
+            # Manually mark the upload as completed.
+            async with factory() as session:
+                result = await session.execute(select(Upload).where(Upload.id == upload_id))
+                row = result.scalar_one()
+                row.status = "completed"
+                await session.commit()
+
+            async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
+                assert resp.status_code == 200
+                events = await _read_sse_events(resp)
 
     stage_sequence = [json.loads(e["data"])["stage"] for e in events if "data" in e]
     assert stage_sequence == ["done"]
@@ -344,59 +383,12 @@ async def test_sse_event_format_uses_named_event_stage_update(
     for ln in event_type_lines:
         assert ln.strip() == "event: stage_update", f"Unexpected event type line: {ln!r}"
 
-    # The first data line should carry the 'received' stage.
-    data_lines = [ln for ln in raw_lines if ln.startswith("data:")]
-    assert len(data_lines) > 0
-    first_payload = json.loads(data_lines[0].removeprefix("data: "))
-    assert first_payload["stage"] == "received"
-    assert first_payload["message"] is None
-    assert first_payload["progress"] is None
-
-
-# ---------------------------------------------------------------------------
-# Phase 3.5: completed_stages + remaining_seconds in SSE events
-# ---------------------------------------------------------------------------
-
-
-async def test_sse_events_include_completed_stages_and_remaining_seconds(
-    bootstrapped_client: AsyncClient,
-) -> None:
-    """SSE events carry completed_stages list and remaining_seconds ETA."""
-    async with bootstrapped_client as ac:
-        await _login_admin(ac)
-        upload_id = await _post_upload(ac)
-
-        async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
-            assert resp.status_code == 200
-            events = await _read_sse_events(resp)
-
-    payloads = [json.loads(e["data"]) for e in events if "data" in e]
-
-    # Every event should carry completed_stages and remaining_seconds.
-    for payload in payloads:
-        assert "completed_stages" in payload, (
-            f"missing completed_stages on stage '{payload.get('stage')}'"
-        )
-        assert "remaining_seconds" in payload, (
-            f"missing remaining_seconds on stage '{payload.get('stage')}'"
-        )
-
-    # First event ('received') should have empty completed_stages.
-    first = payloads[0]
-    assert first["stage"] == "received"
-    assert first["completed_stages"] == []
-
-    # remaining_seconds should be non-negative.
-    for payload in payloads:
-        if payload["remaining_seconds"] is not None:
-            assert payload["remaining_seconds"] >= 0
-
 
 async def test_sse_writes_current_stage_and_completed_stages_to_db(
     bootstrapped_client: AsyncClient,
     db_engine: AsyncEngine,
 ) -> None:
-    """After SSE stream, Upload row has current_stage='done' and all stages in completed_stages."""
+    """After SSE stream, Upload row has current_stage='done' and all stages completed."""
     factory = get_session_factory(db_engine)
 
     async with bootstrapped_client as ac:
@@ -414,10 +406,9 @@ async def test_sse_writes_current_stage_and_completed_stages_to_db(
 
     # After completion, current_stage should be 'done'.
     assert row.current_stage == "done"
-    # completed_stages should be a JSON array of all stages.
+    # completed_stages should be a JSON array containing all non-done stages.
     completed = json.loads(row.completed_stages)
     assert isinstance(completed, list)
-    # All stages except 'done' itself should be in completed_stages at emit time for 'done'.
     for stage in HEARTH_STAGES_ORDER:
         if stage != "done":
             assert stage in completed, f"Stage '{stage}' missing from completed_stages after run"
@@ -451,7 +442,6 @@ async def test_sse_records_pipeline_stage_duration_rows(
         duration_rows = list(result.scalars().all())
 
     # One duration row per stage (cell_progress is one stage).
-    # Number of unique stages = len(HEARTH_STAGES_ORDER).
     recorded_stages = {r.stage for r in duration_rows}
     assert len(duration_rows) == len(HEARTH_STAGES_ORDER), (
         f"Expected {len(HEARTH_STAGES_ORDER)} duration rows, got {len(duration_rows)}: "
@@ -463,3 +453,37 @@ async def test_sse_records_pipeline_stage_duration_rows(
             f"Stage '{row.stage}' has negative duration: {row.duration_seconds}"
         )
         assert row.upload_id == upload_id
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.5: completed_stages + remaining_seconds in SSE events (kept)
+# ---------------------------------------------------------------------------
+
+
+async def test_sse_events_include_completed_stages_and_remaining_seconds(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """SSE events carry completed_stages list and remaining_seconds ETA."""
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        upload_id = await _post_upload(ac)
+
+        async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
+            assert resp.status_code == 200
+            events = await _read_sse_events(resp)
+
+    payloads = [json.loads(e["data"]) for e in events if "data" in e]
+
+    # Every event should carry completed_stages and remaining_seconds.
+    for payload in payloads:
+        assert "completed_stages" in payload, (
+            f"missing completed_stages on stage '{payload.get('stage')}'"
+        )
+        assert "remaining_seconds" in payload, (
+            f"missing remaining_seconds on stage '{payload.get('stage')}'"
+        )
+
+    # remaining_seconds should be non-negative.
+    for payload in payloads:
+        if payload["remaining_seconds"] is not None:
+            assert payload["remaining_seconds"] >= 0

@@ -48,6 +48,23 @@ STAGE_MEDIAN_SECONDS: dict[str, float] = {
 }
 
 
+FULL_PIPELINE_MEDIAN_SECONDS: int = round(sum(STAGE_MEDIAN_SECONDS.values()))
+"""Sum of all stage medians — used as an upper-bound per-upload ETA for queue waits."""
+
+
+def queue_wait_seconds_simple(position: int) -> int:
+    """Upper-bound queue wait: position x full pipeline median.
+
+    Args:
+        position: Number of uploads ahead in the queue.
+            0 → the upload is at the head (running now) → returns 0.
+
+    Returns:
+        Estimated wait in seconds before this upload starts running.
+    """
+    return position * FULL_PIPELINE_MEDIAN_SECONDS
+
+
 def estimate_remaining_seconds(completed: list[str]) -> int:
     """Sum medians of remaining stages.
 
