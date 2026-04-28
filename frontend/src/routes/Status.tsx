@@ -10,6 +10,7 @@ import { Chevron } from '../components/Chevron';
 import { HBtn } from '../components/HBtn';
 import { MobileTabBar } from '../components/MobileTabBar';
 import { useNewCaptureSheet } from '../components/NewCaptureSheet';
+import { OAuthHealthBanner } from '../components/OAuthHealthBanner';
 import styles from './Status.module.css';
 
 // ---------------------------------------------------------------------------
@@ -306,6 +307,9 @@ export function Status(): JSX.Element {
             <p className={styles.subtitle}>Nothing here yet</p>
           )}
         </div>
+
+        {/* OAuth health banner — shown when Google Calendar is disconnected */}
+        <OAuthHealthBanner />
 
         {/* + New capture CTA */}
         <CTAButton onClick={() => sheet.open()} />

@@ -12,6 +12,7 @@ import { formatRelativeTime } from '../lib/relativeTime';
 import { formatETA } from '../lib/eta';
 import { useUploads } from '../lib/useUploads';
 import { MobileTabBar } from '../components/MobileTabBar';
+import { OAuthHealthBanner } from '../components/OAuthHealthBanner';
 import styles from './Index.module.css';
 
 // ---------------------------------------------------------------------------
@@ -141,6 +142,9 @@ export function Index(): JSX.Element {
 
       {/* Main content */}
       <main className={styles.main}>
+        {/* OAuth health banner — shown when Google Calendar is disconnected */}
+        <OAuthHealthBanner />
+
         {/* Greeting */}
         <h1 className={styles.greeting}>{`Hi, ${username}.`}</h1>
         <p className={styles.subhead}>
