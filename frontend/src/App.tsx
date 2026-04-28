@@ -6,6 +6,7 @@ import { Setup } from './routes/Setup';
 import { SetupGoogle } from './routes/SetupGoogle';
 import { SetupFamily } from './routes/SetupFamily';
 import { Upload } from './routes/Upload';
+import { UploadDetail } from './routes/UploadDetail';
 import { RequireAuth } from './auth/RequireAuth';
 import { WizardGate } from './auth/WizardGate';
 
@@ -37,6 +38,7 @@ export function App() {
         <Route path="/setup/google" element={<SetupGoogle />} />
         <Route path="/setup/family" element={<SetupFamily />} />
         <Route path="/upload" element={<Upload />} />
+        <Route path="/uploads/:id" element={<UploadDetail />} />
         <Route path="/" element={<Index />} />
         <Route path="*" element={<Index />} />
       </Route>
