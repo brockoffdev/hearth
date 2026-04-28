@@ -14,6 +14,7 @@ sub-second SSE latency becomes important.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from datetime import UTC, datetime
@@ -57,7 +58,7 @@ async def run_pipeline_for_upload(
             return
         if pos == 0:
             break
-        await __import__("asyncio").sleep(1.0)
+        await asyncio.sleep(1.0)
 
     # Acquire the pipeline lock and pop ourselves from the queue.
     async with acquire_pipeline_slot(upload_id):
