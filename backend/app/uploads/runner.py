@@ -22,7 +22,7 @@ from collections.abc import AsyncGenerator
 from datetime import UTC, date, datetime
 from datetime import time as dt_time
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.config import get_settings
@@ -34,7 +34,9 @@ from backend.app.uploads.pipeline import (
     run_fake_pipeline,
     run_pipeline,
 )
+from backend.app.uploads.preprocessing import extract_photographed_date
 from backend.app.uploads.queue import acquire_pipeline_slot, enqueue, queue_position
+from backend.app.uploads.storage import read_photo
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +102,10 @@ async def _run_chosen_pipeline(
             if upload is None:
                 return
             image_path = upload.image_path
+            # Capture uploaded_at before the session closes.
+            upload_date: date | None = (
+                upload.uploaded_at.date() if upload.uploaded_at else None
+            )
 
         # Load family members for color matching and VLM palette context.
         async with session_factory() as session:
@@ -114,6 +120,21 @@ async def _run_chosen_pipeline(
                 )
         else:
             corrections = ()
+
+        # Extract photographed date from EXIF (best effort).
+        photographed_date: date | None = None
+        try:
+            raw_bytes = await read_photo(image_path, settings.data_dir)
+            photographed_date = await asyncio.to_thread(extract_photographed_date, raw_bytes)
+        except Exception:
+            logger.warning("runner: failed to read photo for EXIF extraction")
+
+        # Fall back to upload.uploaded_at.date() if EXIF unavailable.
+        if photographed_date is None:
+            photographed_date = upload_date if upload_date is not None else date.today()
+            logger.info(
+                "runner: no EXIF DateTimeOriginal; using upload date %s", photographed_date
+            )
 
         async def on_event_extracted(record: ExtractedEventRecord) -> None:
             """Persist one extracted event to the DB."""
@@ -152,6 +173,7 @@ async def _run_chosen_pipeline(
             few_shot_corrections=corrections,
             on_event_extracted=on_event_extracted,
             data_dir=settings.data_dir,
+            photographed_month=photographed_date,
         ):
             yield stage_event
     else:
@@ -322,6 +344,7 @@ async def recover_pending_uploads(
         stmt = select(Upload).where(Upload.status.in_(["queued", "processing"]))
         result = await session.execute(stmt)
         rows = list(result.scalars().all())
+        upload_ids = [u.id for u in rows]
 
         for upload in rows:
             upload.status = "queued"
@@ -331,6 +354,12 @@ async def recover_pending_uploads(
             upload.total_cells = None
             upload.error = None
             upload.finished_at = None
+
+        # Delete any partial Event rows from prior crash-interrupted runs.
+        if upload_ids:
+            await session.execute(
+                delete(Event).where(Event.upload_id.in_(upload_ids))
+            )
 
         if rows:
             await session.commit()

@@ -616,6 +616,23 @@ def test_compute_cell_date_iso_row_offset() -> None:
     assert result == "2026-04-12", f"Expected 2026-04-12, got {result}"
 
 
+def test_compute_cell_date_iso_honors_non_default_photographed_month() -> None:
+    """photographed_month=date(2026, 4, 27) is used; cell (0,3) = April 1 for April 2026.
+
+    April 2026 starts on Wednesday (col 3).  Passing a mid-month date (April 27)
+    still produces the same grid as passing any other April date because only the
+    year and month are used.
+
+    April 1, 2026 = Wednesday → days_to_sunday = (2+1)%7 = 3.
+    Grid start = April 1 - 3 = March 29.
+    Cell (0,3) = March 29 + 3 = April 1, 2026.
+    """
+    photographed_month = date(2026, 4, 27)
+    cell = _make_cell(0, 3)
+    result = _compute_cell_date_iso(cell, photographed_month=photographed_month)
+    assert result == "2026-04-01", f"Expected 2026-04-01 for April 2026 cell (0,3), got {result}"
+
+
 # ---------------------------------------------------------------------------
 # _format_cell_label tests
 # ---------------------------------------------------------------------------

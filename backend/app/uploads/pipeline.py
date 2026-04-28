@@ -298,6 +298,7 @@ async def run_pipeline(
     few_shot_corrections: Sequence[dict[str, str]] = (),
     on_event_extracted: Callable[[ExtractedEventRecord], Awaitable[None]] | None = None,
     data_dir: Path = Path("/data"),
+    photographed_month: date | None = None,
 ) -> AsyncGenerator[StageEvent, None]:
     """Run the real VLM pipeline for one upload.
 
@@ -319,6 +320,8 @@ async def run_pipeline(
         on_event_extracted: Async callback fired after each event record is
             built.  The runner supplies a callback that persists to the DB.
         data_dir: Root directory for reading and writing photos.
+        photographed_month: The date of the photograph (year/month used to
+            derive cell dates).  When None, defaults to date.today().
 
     Yields:
         StageEvent instances in HEARTH_STAGES_ORDER order.
@@ -426,7 +429,9 @@ async def run_pipeline(
     # Stage 5: cell_progress (loop over all detected cells)
     # ------------------------------------------------------------------
     total_cells = len(grid.cells)
-    today = date.today()
+    # Use caller-supplied photographed_month (from EXIF or upload date);
+    # fall back to date.today() for backward-compat when not supplied.
+    effective_month: date = photographed_month if photographed_month is not None else date.today()
 
     for i, cell in enumerate(grid.cells, start=1):
         yield StageEvent(
@@ -458,7 +463,7 @@ async def run_pipeline(
             )
 
         # Determine the calendar date for this cell.
-        cell_date_iso = _compute_cell_date_iso(cell, photographed_month=today)
+        cell_date_iso = _compute_cell_date_iso(cell, photographed_month=effective_month)
         cell_label = _format_cell_label(cell_date_iso)
 
         # Build VLM prompt context.
