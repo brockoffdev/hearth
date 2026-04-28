@@ -351,3 +351,70 @@
     opacity: 0.45;
   }
 }
+
+/* ── InflightBanner ─────────────────────────────────────────────────────── */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--rule));
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.12s;
+}
+
+.banner:hover {
+  background: color-mix(in oklab, var(--accent) 14%, var(--surface));
+}
+
+.bannerText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bannerText strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.bannerSubtext {
+  font-family: var(--fontMono);
+  font-size: 11px;
+  color: var(--fgSoft);
+}
+
+.bannerCTA {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── UploadsLink ────────────────────────────────────────────────────────── */
+
+.uploadsLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 22px 22px;
+  text-decoration: none;
+  color: var(--fgSoft);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.12s;
+}
+
+.uploadsLinkActive {
+  color: var(--accent);
+  font-weight: 700;
+}

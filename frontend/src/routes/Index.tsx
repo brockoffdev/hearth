@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../design/ThemeProvider';
 import { THEME_LABELS } from '../design/themeLabels';
 import { useAuth } from '../auth/AuthProvider';
 import { HearthWordmark } from '../components/HearthWordmark';
 import { useNewCaptureSheet } from '../components/NewCaptureSheet';
-import { listUploads } from '../lib/uploads';
-import type { UploadSummary } from '../lib/uploads';
+import { Spinner } from '../components/Spinner';
+import { Chevron } from '../components/Chevron';
+import { cn } from '../lib/cn';
+import type { Upload } from '../lib/uploads';
 import { formatRelativeTime } from '../lib/relativeTime';
+import { formatETA } from '../lib/eta';
+import { useUploads } from '../lib/useUploads';
 import { MobileTabBar } from '../components/MobileTabBar';
 import styles from './Index.module.css';
 
@@ -15,7 +18,7 @@ import styles from './Index.module.css';
 // Status indicator labels + classes
 // ---------------------------------------------------------------------------
 
-const STATUS_LABELS: Record<UploadSummary['status'], string> = {
+const STATUS_LABELS: Record<Upload['status'], string> = {
   processing: 'Processing',
   completed:  'Done',
   failed:     'Failed',
@@ -25,7 +28,7 @@ const STATUS_LABELS: Record<UploadSummary['status'], string> = {
 // UploadRow
 // ---------------------------------------------------------------------------
 
-function UploadRow({ upload }: { upload: UploadSummary }) {
+function UploadRow({ upload }: { upload: Upload }) {
   return (
     <Link to={`/uploads/${upload.id}`} className={styles.uploadRow}>
       <img
@@ -62,6 +65,47 @@ function SkeletonRow() {
 }
 
 // ---------------------------------------------------------------------------
+// InflightBanner — renders only when inflightCount > 0
+// ---------------------------------------------------------------------------
+
+function InflightBanner({ count, longestETA }: { count: number; longestETA: number }) {
+  if (count === 0) return null;
+
+  return (
+    <Link
+      to="/uploads"
+      className={styles.banner}
+      data-testid="inflight-banner"
+    >
+      <Spinner size={18} ariaLabel="Processing" />
+      <div className={styles.bannerText}>
+        <strong>{count === 1 ? '1 photo processing…' : `${count} photos processing…`}</strong>
+        <span className={styles.bannerSubtext}>
+          {formatETA(longestETA)} remaining · we&apos;ll notify when done
+        </span>
+      </div>
+      <span className={styles.bannerCTA}>View →</span>
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UploadsLink — always visible footer link
+// ---------------------------------------------------------------------------
+
+function UploadsLink({ hasInflight }: { hasInflight: boolean }) {
+  return (
+    <Link
+      to="/uploads"
+      className={cn(styles.uploadsLink, hasInflight && styles.uploadsLinkActive)}
+    >
+      <span>View all uploads</span>
+      <Chevron />
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Index (MobileHome)
 // ---------------------------------------------------------------------------
 
@@ -73,35 +117,9 @@ export function Index(): JSX.Element {
   const username =
     state.status === 'authenticated' ? state.user.username : '';
 
-  const [uploads, setUploads] = useState<UploadSummary[] | null>(null);
-  const [loadError, setLoadError] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const { uploads, isLoading, loadError, inflightCount, longestETA, lastFetchedAt } = useUploads();
 
-  useEffect(() => {
-    // Only fetch once we know the user is authenticated
-    if (state.status !== 'authenticated') return;
-
-    let cancelled = false;
-    setUploads(null);
-    setLoadError(false);
-
-    listUploads()
-      .then((data) => {
-        if (cancelled) return;
-        setUploads(data);
-        setLastSyncTime(new Date());
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLoadError(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [state.status]);
-
-  const visibleUploads = Array.isArray(uploads) ? uploads.slice(0, 10) : null;
+  const visibleUploads = isLoading ? null : uploads.slice(0, 10);
 
   return (
     <div className={styles.page}>
@@ -130,6 +148,9 @@ export function Index(): JSX.Element {
           events to your Google calendars.
         </p>
 
+        {/* In-flight banner — only when uploads are processing */}
+        <InflightBanner count={inflightCount} longestETA={longestETA} />
+
         {/* Take a photo CTA */}
         <button type="button" className={styles.ctaLink} onClick={sheet.open}>
           📷 Take a photo
@@ -140,7 +161,7 @@ export function Index(): JSX.Element {
           <h2 className={styles.sectionTitle}>Recent uploads</h2>
 
           {/* Loading state */}
-          {uploads === null && !loadError && (
+          {visibleUploads === null && !loadError && (
             <div className={styles.skeletonList}>
               <SkeletonRow />
               <SkeletonRow />
@@ -177,12 +198,15 @@ export function Index(): JSX.Element {
           )}
 
           {/* Last sync */}
-          {lastSyncTime !== null && (
+          {lastFetchedAt !== null && (
             <p className={styles.lastSync}>
-              Last sync: {formatRelativeTime(lastSyncTime.toISOString())}
+              Last sync: {formatRelativeTime(lastFetchedAt.toISOString())}
             </p>
           )}
         </section>
+
+        {/* View all uploads link — always visible */}
+        <UploadsLink hasInflight={inflightCount > 0} />
       </main>
 
       <MobileTabBar active="home" />
