@@ -179,7 +179,7 @@ export function UploadDetail(): JSX.Element {
             if (cancelled) return;
 
             if (update.stage === 'done') {
-              setState((prev) => ({ ...prev, isComplete: true }));
+              setState((prev) => ({ ...prev, isComplete: true, sseError: null }));
               sseCleanup?.();
               sseCleanup = null;
               return;
@@ -198,6 +198,7 @@ export function UploadDetail(): JSX.Element {
                 update.remaining_seconds !== undefined
                   ? update.remaining_seconds
                   : prev.remainingSeconds,
+              sseError: null,
             }));
           },
           onError: () => {
@@ -351,7 +352,7 @@ export function UploadDetail(): JSX.Element {
         <BackChevron onClick={() => void navigate('/uploads')} />
         <span className={styles.headerMeta}>Upload #{parsedId} · started {state.upload?.thumbLabel ?? '…'}</span>
         <span className={styles.progressBadge} aria-live="polite">
-          {count > 0 ? `${count} of 10` : 'Starting…'}
+          {count > 0 ? `${count} of ${HEARTH_STAGES.length - 1}` : 'Starting…'}
         </span>
       </header>
 

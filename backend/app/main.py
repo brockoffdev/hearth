@@ -19,6 +19,7 @@ from backend.app.db.base import get_session_factory
 from backend.app.static import mount_frontend
 from backend.app.uploads.pipeline import refresh_stage_medians_from_db
 from backend.app.uploads.runner import recover_pending_uploads
+from backend.app.vision import get_vision_provider
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,27 @@ def create_app() -> FastAPI:
                 logger.exception(
                     "Failed to recover stranded uploads — "
                     "they will need manual cleanup"
+                )
+
+        # Phase 5 Task C: non-fatal VisionProvider liveness probe at startup.
+        if settings.vision_health_check_on_startup:
+            try:
+                provider = get_vision_provider(settings)
+                provider_name = provider.name
+                healthy = await provider.health_check()
+                if healthy:
+                    logger.info("Vision provider %s healthy", provider_name)
+                else:
+                    logger.warning(
+                        "Vision provider %s health check failed "
+                        "(provider may be unavailable)",
+                        provider_name,
+                    )
+            except Exception:
+                logger.warning(
+                    "Vision provider %s health check failed "
+                    "(provider may be unavailable)",
+                    settings.vision_provider,
                 )
 
         yield

@@ -1,8 +1,9 @@
-"""Admin API endpoints — Phase 2 Task F.
+"""Admin API endpoints — Phase 2 Task F / Phase 5 Task C.
 
 Routes:
   GET  /api/admin/family            — list family members with calendar mappings
   PATCH /api/admin/family/{id}      — update a single family member's calendar mapping
+  GET  /api/admin/vision/health     — one-shot VisionProvider liveness probe
 """
 
 from __future__ import annotations
@@ -13,8 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.auth.dependencies import require_admin
+from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import FamilyMember
+from backend.app.vision import get_vision_provider
 
 router = APIRouter()
 
@@ -74,3 +77,56 @@ async def patch_family_member(
     await db.commit()
     await db.refresh(member)
     return FamilyMemberResponse.model_validate(member)
+
+
+# ---------------------------------------------------------------------------
+# Vision health
+# ---------------------------------------------------------------------------
+
+
+class VisionHealthResponse(BaseModel):
+    provider: str
+    model: str
+    name: str
+    healthy: bool
+    error: str | None
+
+
+@router.get("/vision/health", response_model=VisionHealthResponse)
+async def vision_health(
+    settings: Settings = Depends(get_settings),
+    _admin: object = Depends(require_admin),
+) -> VisionHealthResponse:
+    """Probe the configured VisionProvider and report liveness.
+
+    Returns 200 in all cases (including failures) so the caller can inspect
+    the ``healthy`` flag and ``error`` field without catching HTTP errors.
+    """
+    try:
+        provider = get_vision_provider(settings)
+    except (ValueError, NotImplementedError) as exc:
+        return VisionHealthResponse(
+            provider=settings.vision_provider,
+            model=settings.vision_model,
+            name=settings.vision_provider,
+            healthy=False,
+            error=str(exc),
+        )
+
+    try:
+        healthy = await provider.health_check()
+        error = None if healthy else "provider unreachable"
+    except Exception as exc:
+        # health_check should never raise per the Protocol contract, but
+        # honor the docstring's "Returns 200 in all cases" promise even
+        # when a provider misbehaves.
+        healthy = False
+        error = f"health check raised: {exc}"
+
+    return VisionHealthResponse(
+        provider=settings.vision_provider,
+        model=settings.vision_model,
+        name=provider.name,
+        healthy=healthy,
+        error=error,
+    )

@@ -23,6 +23,9 @@ os.environ.setdefault("HEARTH_DISPATCH_RUNNER_ON_CREATE_UPLOAD", "false")
 # Disable startup recovery sweep in tests; test_pipeline_recovery.py exercises
 # recover_pending_uploads() directly without going through lifespan.
 os.environ.setdefault("HEARTH_RECOVER_UPLOADS_ON_STARTUP", "false")
+# Disable the vision health probe in tests; test_lifespan_vision_probe.py
+# exercises it directly with explicit settings overrides.
+os.environ.setdefault("HEARTH_VISION_HEALTH_CHECK_ON_STARTUP", "false")
 
 from collections.abc import AsyncGenerator
 from pathlib import Path

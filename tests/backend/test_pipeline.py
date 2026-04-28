@@ -142,3 +142,18 @@ async def test_pipeline_remaining_seconds_on_received_is_full_sum() -> None:
     received = next(e for e in events if e.stage == "received")
     expected = estimate_remaining_seconds([])
     assert received.remaining_seconds == expected
+
+
+@pytest.mark.asyncio
+async def test_fake_pipeline_grid_detected_carries_total_cells() -> None:
+    """The grid_detected StageEvent from run_fake_pipeline carries progress.total > 0.
+
+    This ensures the UI can render "of N" immediately after grid detection,
+    before the slow model_loading stage begins.
+    """
+    events = await _collect_all_events()
+    grid_event = next(e for e in events if e.stage == "grid_detected")
+    assert grid_event.progress is not None, "grid_detected event must carry progress"
+    assert grid_event.progress["total"] > 0, "progress.total must be > 0"
+    assert grid_event.progress["cell"] == 0, "progress.cell must be 0 at grid_detected"
+    assert grid_event.progress["total"] == FAKE_TOTAL_CELLS

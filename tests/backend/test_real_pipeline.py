@@ -567,6 +567,50 @@ async def test_run_pipeline_cell_progress_events_have_progress_field() -> None:
         assert ev.progress == {"cell": i, "total": 3}, f"cell {i} has wrong progress: {ev.progress}"
 
 
+@pytest.mark.asyncio
+async def test_run_pipeline_grid_detected_carries_total_cells() -> None:
+    """grid_detected StageEvent carries progress={"cell": 0, "total": N} immediately.
+
+    This lets the UI render "of N" before the slow model_loading stage begins.
+    """
+    family_members = _make_family_members()
+    grid = _make_grid(rows=2, cols=7)  # 14 cells
+
+    with (
+        patch(f"{_PL}.read_photo", new=AsyncMock(return_value=b"img")),
+        patch(f"{_PL}.preprocess_photo", new=AsyncMock(return_value=b"pre")),
+        patch(f"{_PL}.detect_grid", new=AsyncMock(return_value=grid)),
+        patch(f"{_PL}.get_vision_provider") as mock_factory,
+        patch(f"{_PL}.match_ink_color_async", new=AsyncMock(return_value=None)),
+        patch(f"{_PL}.store_photo", new=AsyncMock(return_value=("x", "p"))),
+        patch(f"{_PL}.crop_cell", return_value=FAKE_CELL_BYTES),
+    ):
+        mock_provider = MagicMock()
+        mock_provider.extract_events_from_cell = AsyncMock(return_value=())
+        mock_factory.return_value = mock_provider
+
+        settings = _make_settings()
+        events: list[StageEvent] = []
+        async for ev in run_pipeline(
+            upload_id=1,
+            image_path="uploads/fake.jpg",
+            settings=settings,
+            family_members=family_members,
+        ):
+            events.append(ev)
+
+    grid_event = next(e for e in events if e.stage == "grid_detected")
+    assert grid_event.progress is not None, "grid_detected event must carry progress"
+    assert grid_event.progress["cell"] == 0, "progress.cell must be 0 at grid_detected"
+    total = grid_event.progress["total"]
+    assert total == 14, f"expected total=14, got {total}"
+
+    # Verify model_loading comes after grid_detected in the event stream
+    grid_idx = next(i for i, e in enumerate(events) if e.stage == "grid_detected")
+    model_idx = next(i for i, e in enumerate(events) if e.stage == "model_loading")
+    assert grid_idx < model_idx, "grid_detected must precede model_loading"
+
+
 # ---------------------------------------------------------------------------
 # _compute_cell_date_iso tests
 # ---------------------------------------------------------------------------
@@ -614,6 +658,23 @@ def test_compute_cell_date_iso_row_offset() -> None:
     result = _compute_cell_date_iso(cell, photographed_month=photographed_month)
     # March 29 + 2*7 days = April 12
     assert result == "2026-04-12", f"Expected 2026-04-12, got {result}"
+
+
+def test_compute_cell_date_iso_honors_non_default_photographed_month() -> None:
+    """photographed_month=date(2026, 4, 27) is used; cell (0,3) = April 1 for April 2026.
+
+    April 2026 starts on Wednesday (col 3).  Passing a mid-month date (April 27)
+    still produces the same grid as passing any other April date because only the
+    year and month are used.
+
+    April 1, 2026 = Wednesday → days_to_sunday = (2+1)%7 = 3.
+    Grid start = April 1 - 3 = March 29.
+    Cell (0,3) = March 29 + 3 = April 1, 2026.
+    """
+    photographed_month = date(2026, 4, 27)
+    cell = _make_cell(0, 3)
+    result = _compute_cell_date_iso(cell, photographed_month=photographed_month)
+    assert result == "2026-04-01", f"Expected 2026-04-01 for April 2026 cell (0,3), got {result}"
 
 
 # ---------------------------------------------------------------------------

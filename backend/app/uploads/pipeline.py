@@ -270,6 +270,15 @@ async def run_fake_pipeline(
                 )
                 if cell_delay_seconds > 0 and cell_n < FAKE_TOTAL_CELLS:
                     await asyncio.sleep(cell_delay_seconds)
+        elif stage_key == "grid_detected":
+            # Emit total cell count immediately after grid detection so the UI
+            # can show "of N" before the slow model_loading stage begins.
+            yield StageEvent(
+                stage="grid_detected",
+                progress={"cell": 0, "total": FAKE_TOTAL_CELLS},
+                completed_stages=completed.copy(),
+                remaining_seconds=estimate_remaining_seconds(completed),
+            )
         else:
             yield StageEvent(
                 stage=stage_key,
@@ -298,6 +307,7 @@ async def run_pipeline(
     few_shot_corrections: Sequence[dict[str, str]] = (),
     on_event_extracted: Callable[[ExtractedEventRecord], Awaitable[None]] | None = None,
     data_dir: Path = Path("/data"),
+    photographed_month: date | None = None,
 ) -> AsyncGenerator[StageEvent, None]:
     """Run the real VLM pipeline for one upload.
 
@@ -319,6 +329,8 @@ async def run_pipeline(
         on_event_extracted: Async callback fired after each event record is
             built.  The runner supplies a callback that persists to the DB.
         data_dir: Root directory for reading and writing photos.
+        photographed_month: The date of the photograph (year/month used to
+            derive cell dates).  When None, defaults to date.today().
 
     Yields:
         StageEvent instances in HEARTH_STAGES_ORDER order.
@@ -356,12 +368,13 @@ async def run_pipeline(
     # ------------------------------------------------------------------
     # Stage 3: grid_detected
     # ------------------------------------------------------------------
+    grid = await detect_grid(preprocessed_bytes)
     yield StageEvent(
         stage="grid_detected",
+        progress={"cell": 0, "total": len(grid.cells)},
         completed_stages=completed.copy(),
         remaining_seconds=estimate_remaining_seconds(completed),
     )
-    grid = await detect_grid(preprocessed_bytes)
     completed.append("grid_detected")
 
     if not grid.cells:
@@ -426,7 +439,9 @@ async def run_pipeline(
     # Stage 5: cell_progress (loop over all detected cells)
     # ------------------------------------------------------------------
     total_cells = len(grid.cells)
-    today = date.today()
+    # Use caller-supplied photographed_month (from EXIF or upload date);
+    # fall back to date.today() for backward-compat when not supplied.
+    effective_month: date = photographed_month if photographed_month is not None else date.today()
 
     for i, cell in enumerate(grid.cells, start=1):
         yield StageEvent(
@@ -458,7 +473,7 @@ async def run_pipeline(
             )
 
         # Determine the calendar date for this cell.
-        cell_date_iso = _compute_cell_date_iso(cell, photographed_month=today)
+        cell_date_iso = _compute_cell_date_iso(cell, photographed_month=effective_month)
         cell_label = _format_cell_label(cell_date_iso)
 
         # Build VLM prompt context.

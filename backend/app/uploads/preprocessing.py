@@ -8,6 +8,9 @@ Four pure helpers (testable in isolation):
     _downscale       — Fit long edge to target_long_edge_px
     _deskew          — Hough-transform dominant-line deskew via OpenCV
     _perspective_correct — Four-point perspective warp via OpenCV
+
+Phase 5 Task B adds:
+    extract_photographed_date(image_bytes) -> date | None
 """
 
 from __future__ import annotations
@@ -15,12 +18,56 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+from datetime import date, datetime
 
 import cv2
 import numpy as np
 from PIL import Image, ImageOps
+from PIL.ExifTags import TAGS  # noqa: F401 — kept for potential future use
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# EXIF date extraction (Phase 5 Task B)
+# ---------------------------------------------------------------------------
+
+
+def extract_photographed_date(image_bytes: bytes) -> date | None:
+    """Extract the photo-taken date from EXIF DateTimeOriginal.
+
+    Tries tag 36867 (DateTimeOriginal) first; falls back to tag 306
+    (DateTime — last modified).  Returns None on any failure so callers
+    can safely fall back to upload.uploaded_at.
+
+    Args:
+        image_bytes: Raw photo bytes (JPEG, PNG, etc.).
+
+    Returns:
+        The date (year-month-day) parsed from EXIF, or None if EXIF is
+        missing or unparsable.
+    """
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        exif = image.getexif()
+        if not exif:
+            return None
+        # DateTimeOriginal is tag 36867; DateTime (last modified) is 306.
+        # Prefer the Original.
+        for tag_id in (36867, 306):
+            value = exif.get(tag_id)
+            if not value:
+                continue
+            try:
+                # EXIF format is "YYYY:MM:DD HH:MM:SS"
+                dt = datetime.strptime(str(value).strip(), "%Y:%m:%d %H:%M:%S")
+                return dt.date()
+            except (ValueError, AttributeError):
+                continue
+        return None
+    except Exception:
+        # Any image-loading or parsing failure — defensive
+        return None
 
 
 # ---------------------------------------------------------------------------

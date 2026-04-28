@@ -112,6 +112,16 @@ class Settings(BaseSettings):
     # Override via HEARTH_USE_REAL_PIPELINE.
     use_real_pipeline: bool = False
 
+    # How many of the most recent event_corrections to include as few-shot
+    # examples in the VLM prompt. Override via HEARTH_FEW_SHOT_CORRECTION_WINDOW.
+    # Set to 0 to disable few-shot retrieval entirely.
+    few_shot_correction_window: int = 10
+
+    # When True, probe the configured VisionProvider during startup lifespan.
+    # Non-fatal: failures log a warning but never block startup.
+    # Set HEARTH_VISION_HEALTH_CHECK_ON_STARTUP=false in tests or dev to skip.
+    vision_health_check_on_startup: bool = True
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
