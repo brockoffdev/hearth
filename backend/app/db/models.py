@@ -1,6 +1,7 @@
 """SQLAlchemy 2.0 declarative models for Phase 2+ tables.
 
-Tables created here: users, family_members, oauth_tokens, settings, uploads.
+Tables created here: users, family_members, oauth_tokens, settings, uploads,
+pipeline_stage_durations.
 Deferred to later phases: events, event_corrections.
 """
 
@@ -89,9 +90,37 @@ class Upload(Base):
     error: Mapped[str | None] = mapped_column(nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
+    # Phase 3.5: progress tracking columns (added by migration 0005)
+    current_stage: Mapped[str | None] = mapped_column(nullable=True)
+    completed_stages: Mapped[str] = mapped_column(
+        nullable=False, server_default=text("'[]'")
+    )
+    cell_progress: Mapped[int | None] = mapped_column(nullable=True)
+    total_cells: Mapped[int | None] = mapped_column(nullable=True)
+
     __table_args__ = (
         CheckConstraint(
             "status IN ('queued','processing','completed','failed')",
             name="uploads_status_check",
         ),
+    )
+
+
+class PipelineStageDuration(Base):
+    """Per-stage timing measurements for pipeline runs.
+
+    Phase 3.5 inserts these rows during SSE streaming.  Phase 4+ uses them
+    to compute real ETA medians, replacing STAGE_MEDIAN_SECONDS.
+    """
+
+    __tablename__ = "pipeline_stage_durations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    upload_id: Mapped[int] = mapped_column(
+        ForeignKey("uploads.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stage: Mapped[str] = mapped_column(nullable=False, index=True)
+    duration_seconds: Mapped[float] = mapped_column(nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
