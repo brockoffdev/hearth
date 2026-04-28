@@ -1,3 +1,5 @@
+import { apiFetch } from './api';
+
 export type FamilyMemberId = 'bryant' | 'danielle' | 'isabella' | 'eliana' | 'family';
 
 export interface FamilyMember {
@@ -15,3 +17,15 @@ export const HEARTH_FAMILY: readonly FamilyMember[] = [
   { id: 'eliana',   name: 'Ellie',    role: 'Age 0',     hex: '#E17AA1', label: 'Pink'   },
   { id: 'family',   name: 'Family',   role: 'Everyone',  hex: '#D97A2C', label: 'Orange' },
 ] as const;
+
+/** Shape returned by GET /api/family (mirrors the admin FamilyMemberResponse schema). */
+export interface ApiFamilyMember {
+  id: number;
+  name: string;
+  color_hex_center: string;
+  google_calendar_id: string | null;
+}
+
+export async function listFamily(): Promise<ApiFamilyMember[]> {
+  return apiFetch<ApiFamilyMember[]>('/api/family');
+}
