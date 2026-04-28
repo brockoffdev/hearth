@@ -22,7 +22,65 @@ import { formatETA, formatDuration } from '../lib/eta';
 import { useNewCaptureSheet } from '../components/NewCaptureSheet';
 import { MobileTabBar } from '../components/MobileTabBar';
 import type { TabId } from '../components/MobileTabBar';
+import { InflightRow, QueuedRow, CompletedRow, FailedRow } from './Status';
 import styles from './DesignSmoke.module.css';
+
+// ---------------------------------------------------------------------------
+// Status row preview fixtures
+// ---------------------------------------------------------------------------
+
+const SMOKE_INFLIGHT = {
+  id: 'smoke-1',
+  status: 'processing' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-27T09:00:00Z',
+  thumbLabel: 'Apr 27, 9:00 AM',
+  startedAt: 'Just now',
+  current_stage: 'cell_progress',
+  completed_stages: ['received', 'preprocessing', 'grid_detected', 'model_loading'],
+  cellProgress: 12,
+  totalCells: 35,
+  remaining_seconds: 184,
+  queuedBehind: 0,
+};
+
+const SMOKE_QUEUED = {
+  id: 'smoke-2',
+  status: 'processing' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-27T09:01:00Z',
+  thumbLabel: 'Apr 27, 9:01 AM',
+  startedAt: '8 sec ago',
+  current_stage: 'queued',
+  completed_stages: [] as string[],
+  remaining_seconds: 393,
+  queuedBehind: 1,
+};
+
+const SMOKE_COMPLETED = {
+  id: 'smoke-3',
+  status: 'completed' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-27T07:00:00Z',
+  thumbLabel: 'Apr 27, 7:00 AM',
+  finishedAt: '2 hr ago',
+  found: 14,
+  review: 3,
+  durationSec: 118,
+};
+
+const SMOKE_FAILED = {
+  id: 'smoke-4',
+  status: 'failed' as const,
+  image_path: '',
+  url: '',
+  uploaded_at: '2026-04-26T16:00:00Z',
+  thumbLabel: 'Apr 26, 4:00 PM',
+  error: 'Image too blurry — could not detect grid',
+};
 
 const FAMILY_MEMBERS: FamilyMemberId[] = ['bryant', 'danielle', 'isabella', 'eliana', 'family'];
 
@@ -403,6 +461,25 @@ export function DesignSmoke() {
               <span className={styles.swatchLabel}>dur {sec}s</span>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Status row variants section */}
+      <section className={styles.section} data-testid="status-rows-section">
+        <h2 className={styles.sectionTitle}>Status row variants</h2>
+        <p className={styles.subtitle}>One of each row type as rendered in the Uploads inbox.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
+          <InflightRow upload={SMOKE_INFLIGHT} />
+          <QueuedRow
+            upload={SMOKE_QUEUED}
+            position={2}
+            cancel={() => { /* smoke no-op */ }}
+          />
+          <CompletedRow upload={SMOKE_COMPLETED} />
+          <FailedRow
+            upload={SMOKE_FAILED}
+            retry={() => { /* smoke no-op */ }}
+          />
         </div>
       </section>
     </div>

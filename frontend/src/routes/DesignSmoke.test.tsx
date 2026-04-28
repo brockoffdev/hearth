@@ -154,8 +154,8 @@ describe('DesignSmoke — Phase 3.5 primitives section', () => {
     expect(screen.getByText('—')).not.toBeNull();
     // 45 → '~45 sec'
     expect(screen.getByText(formatETA(45))).not.toBeNull();
-    // 184 → '~3 min 4 sec'
-    expect(screen.getByText(formatETA(184))).not.toBeNull();
+    // 184 → '~3 min 4 sec' — may appear multiple times (ETA section + Status row preview)
+    expect(screen.getAllByText(formatETA(184)).length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders formatDuration examples', () => {
@@ -185,6 +185,38 @@ describe('DesignSmoke — MobileTabBar section', () => {
       const activeLinks = nav.querySelectorAll('a[data-active="true"]');
       expect(activeLinks.length).toBe(1);
     });
+  });
+});
+
+describe('DesignSmoke — Status row variants section', () => {
+  it('renders the status-rows-section', () => {
+    const { container } = renderSmoke();
+    expect(container.querySelector('[data-testid="status-rows-section"]')).not.toBeNull();
+  });
+
+  it('renders the "Status row variants" section title', () => {
+    renderSmoke();
+    expect(screen.getByText('Status row variants')).not.toBeNull();
+  });
+
+  it('renders an InflightRow with cell_progress stage label', () => {
+    renderSmoke();
+    expect(screen.getByText(/reading cells · 12 of 35/i)).not.toBeNull();
+  });
+
+  it('renders a QueuedRow with "Waiting · 1 photo ahead"', () => {
+    renderSmoke();
+    expect(screen.getByText(/waiting · 1 photo ahead/i)).not.toBeNull();
+  });
+
+  it('renders a CompletedRow with events found', () => {
+    renderSmoke();
+    expect(screen.getByText(/14 events found/i)).not.toBeNull();
+  });
+
+  it('renders a FailedRow with "Couldn\'t read this one"', () => {
+    renderSmoke();
+    expect(screen.getByText(/couldn't read this one/i)).not.toBeNull();
   });
 });
 
