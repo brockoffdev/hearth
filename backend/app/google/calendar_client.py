@@ -1,17 +1,16 @@
 """Google Calendar API client wrappers.
 
 These helpers wrap ``googleapiclient.discovery.build("calendar", "v3", ...)``
-and surface only the functionality Task E-F need: listing calendars and
-creating a new calendar.
+and surface only the functionality Phases 2-7 need: listing calendars,
+creating a new calendar, and CRUD operations on calendar events.
 
 The underlying Google client library is synchronous, so all blocking calls
 are dispatched via ``asyncio.to_thread``.
 
 ``credentials_for`` handles token refresh and returns a ``was_refreshed``
 flag; the caller is responsible for persisting the updated access token back
-to the database if ``was_refreshed`` is True.  ``list_calendars`` and
-``create_calendar`` accept a ready-to-use ``Credentials`` object so this
-module has no database dependencies.
+to the database if ``was_refreshed`` is True.  All other helpers accept a
+ready-to-use ``Credentials`` object so this module has no database dependencies.
 
 mypy: the Google auth libraries have partial typing; per-module overrides in
 pyproject.toml suppress missing-import / untyped-call errors for those packages.
@@ -26,6 +25,7 @@ from typing import Any
 import google.auth.transport.requests
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from backend.app.db.models import OauthToken
 
@@ -122,5 +122,105 @@ async def create_calendar(creds: Credentials, summary: str) -> dict[str, Any]:
             "id": result.get("id"),
             "summary": result.get("summary"),
         }
+
+    return await asyncio.to_thread(_sync)
+
+
+# ---------------------------------------------------------------------------
+# Event CRUD helpers (Phase 7)
+# ---------------------------------------------------------------------------
+
+_EVENT_FIELDS = {"id", "htmlLink", "status", "updated", "extendedProperties"}
+
+
+def _prune_event(raw: dict[str, Any]) -> dict[str, Any]:
+    """Return only the fields callers need; GCal returns many more."""
+    return {k: raw[k] for k in _EVENT_FIELDS if k in raw}
+
+
+async def insert_event(
+    creds: Credentials,
+    calendar_id: str,
+    event_body: dict[str, Any],
+) -> dict[str, Any]:
+    """Insert a new event into *calendar_id* and return the pruned event dict."""
+
+    def _sync() -> dict[str, Any]:
+        service = build("calendar", "v3", credentials=creds)
+        result: dict[str, Any] = (
+            service.events()
+            .insert(calendarId=calendar_id, body=event_body)
+            .execute()
+        )
+        return _prune_event(result)
+
+    return await asyncio.to_thread(_sync)
+
+
+async def patch_event(
+    creds: Credentials,
+    calendar_id: str,
+    event_id: str,
+    event_body: dict[str, Any],
+) -> dict[str, Any]:
+    """Partially update *event_id* in *calendar_id* and return the pruned event dict."""
+
+    def _sync() -> dict[str, Any]:
+        service = build("calendar", "v3", credentials=creds)
+        result: dict[str, Any] = (
+            service.events()
+            .patch(calendarId=calendar_id, eventId=event_id, body=event_body)
+            .execute()
+        )
+        return _prune_event(result)
+
+    return await asyncio.to_thread(_sync)
+
+
+async def delete_event(
+    creds: Credentials,
+    calendar_id: str,
+    event_id: str,
+) -> None:
+    """Delete *event_id* from *calendar_id*.
+
+    Idempotent: 404 and 410 responses are silently swallowed so callers can
+    treat the GCal event as already gone without special-casing.
+    """
+
+    def _sync() -> None:
+        service = build("calendar", "v3", credentials=creds)
+        try:
+            service.events().delete(
+                calendarId=calendar_id, eventId=event_id
+            ).execute()
+        except HttpError as exc:
+            if exc.resp.status in (404, 410):
+                return
+            raise
+
+    await asyncio.to_thread(_sync)
+
+
+async def get_event(
+    creds: Credentials,
+    calendar_id: str,
+    event_id: str,
+) -> dict[str, Any] | None:
+    """Return the full event dict for *event_id*, or ``None`` on 404/410."""
+
+    def _sync() -> dict[str, Any] | None:
+        service = build("calendar", "v3", credentials=creds)
+        try:
+            result: dict[str, Any] = (
+                service.events()
+                .get(calendarId=calendar_id, eventId=event_id)
+                .execute()
+            )
+            return result
+        except HttpError as exc:
+            if exc.resp.status in (404, 410):
+                return None
+            raise
 
     return await asyncio.to_thread(_sync)
