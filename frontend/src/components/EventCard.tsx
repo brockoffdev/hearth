@@ -1,7 +1,7 @@
 import type { Event } from '../lib/events';
 import { cellCropUrl } from '../lib/events';
 import { FamilyChip } from './FamilyChip';
-import type { FamilyMemberId } from '../lib/family';
+import { familyIdByHex } from '../lib/family';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { cn } from '../lib/cn';
 import styles from './EventCard.module.css';
@@ -42,11 +42,7 @@ function badgeStatus(status: Event['status']): 'auto' | 'review' | 'skipped' {
 }
 
 export function EventCard({ event, showCellCrop = false, onClick, className }: EventCardProps) {
-  // FamilyChip needs a FamilyMemberId. The event carries the joined name/hex
-  // but not the typed ID key. We treat family_member_name as the key when
-  // available; if it doesn't map to a known member, FamilyChip renders its
-  // own graceful fallback (console.warn + "Unknown").
-  const chipWho = event.family_member_name?.toLowerCase() as FamilyMemberId | undefined;
+  const chipWho = familyIdByHex(event.family_member_color_hex);
 
   return (
     <div

@@ -86,6 +86,28 @@ describe('EventCard', () => {
     expect(subtitle.textContent).not.toMatch(/all day/i);
   });
 
+  it.each([
+    ['Izzy', '#7B4FB8', 'isabella'],
+    ['Ellie', '#E17AA1', 'eliana'],
+  ])(
+    'maps backend display name %s to FamilyChip via color hex',
+    (name, hex, expectedId) => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      render(
+        <EventCard
+          event={makeEvent({ family_member_name: name, family_member_color_hex: hex })}
+        />,
+      );
+      // FamilyChip's dot carries data-who attribute matching the resolved id.
+      // No console.warn fallback should fire for known members.
+      expect(consoleWarn).not.toHaveBeenCalled();
+      // The dot is queryable via its data-who attribute.
+      const dot = document.querySelector(`[data-who="${expectedId}"]`);
+      expect(dot).toBeTruthy();
+      consoleWarn.mockRestore();
+    },
+  );
+
   it('renders gracefully when family_member_name is null', () => {
     render(
       <EventCard

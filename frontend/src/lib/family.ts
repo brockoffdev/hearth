@@ -18,6 +18,15 @@ export const HEARTH_FAMILY: readonly FamilyMember[] = [
   { id: 'family',   name: 'Family',   role: 'Everyone',  hex: '#D97A2C', label: 'Orange' },
 ] as const;
 
+// Backend-stored display names (e.g. "Izzy", "Ellie") don't match local
+// FamilyMemberId keys ("isabella", "eliana"), so we resolve via the unique
+// per-family color hex instead.
+export function familyIdByHex(hex: string | null | undefined): FamilyMemberId | undefined {
+  if (!hex) return undefined;
+  const normalized = hex.toLowerCase();
+  return HEARTH_FAMILY.find((m) => m.hex.toLowerCase() === normalized)?.id;
+}
+
 /** Shape returned by GET /api/family (mirrors the admin FamilyMemberResponse schema). */
 export interface ApiFamilyMember {
   id: number;

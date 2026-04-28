@@ -348,7 +348,7 @@ async def get_event_cell_crop(
         raise HTTPException(status_code=404, detail="No cell crop for this event")
 
     resolved = (settings.data_dir / event.cell_crop_path).resolve()
-    if not str(resolved).startswith(str(settings.data_dir.resolve())):
+    if not resolved.is_relative_to(settings.data_dir.resolve()):
         raise HTTPException(status_code=400, detail="Invalid cell crop path")
 
     try:

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HEARTH_FAMILY } from './family';
+import { HEARTH_FAMILY, familyIdByHex } from './family';
 
 describe('HEARTH_FAMILY', () => {
   it('has exactly 5 members', () => {
@@ -25,5 +25,21 @@ describe('HEARTH_FAMILY', () => {
   it('every member has a unique id', () => {
     const ids = HEARTH_FAMILY.map((m) => m.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('familyIdByHex', () => {
+  it('resolves each canonical hex to its id (case-insensitive)', () => {
+    expect(familyIdByHex('#2E5BA8')).toBe('bryant');
+    expect(familyIdByHex('#c0392b')).toBe('danielle');
+    expect(familyIdByHex('#7B4FB8')).toBe('isabella');
+    expect(familyIdByHex('#E17AA1')).toBe('eliana');
+    expect(familyIdByHex('#D97A2C')).toBe('family');
+  });
+
+  it('returns undefined for unknown hex, null, or undefined', () => {
+    expect(familyIdByHex('#000000')).toBeUndefined();
+    expect(familyIdByHex(null)).toBeUndefined();
+    expect(familyIdByHex(undefined)).toBeUndefined();
   });
 });
