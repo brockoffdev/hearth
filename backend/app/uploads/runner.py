@@ -16,14 +16,140 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
-from datetime import UTC, datetime
+from collections.abc import AsyncGenerator
+from datetime import UTC, date, datetime
+from datetime import time as dt_time
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.app.db.models import PipelineStageDuration, Upload
-from backend.app.uploads.pipeline import run_fake_pipeline
+from backend.app.config import get_settings
+from backend.app.db.models import Event, FamilyMember, PipelineStageDuration, Upload
+from backend.app.uploads.pipeline import (
+    ExtractedEventRecord,
+    StageEvent,
+    run_fake_pipeline,
+    run_pipeline,
+)
 from backend.app.uploads.queue import acquire_pipeline_slot, queue_position
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_event_datetime(iso_date: str, time_text: str | None) -> datetime:
+    """Combine an ISO date string with an optional time string into a datetime.
+
+    Tries several common time formats (12-hour with AM/PM, 24-hour, etc.).
+    Falls back to midnight when time_text is None or cannot be parsed.
+
+    Args:
+        iso_date: ISO 8601 date string, e.g. ``"2026-04-27"``.
+        time_text: Human-readable time string, e.g. ``"8:30 AM"`` or ``"14:00"``.
+            May be ``None`` for all-day events.
+
+    Returns:
+        Combined :class:`datetime` with no timezone (naive UTC-local).
+    """
+    base = date.fromisoformat(iso_date)
+    if not time_text:
+        return datetime.combine(base, dt_time(0, 0))
+
+    for fmt in ("%I:%M %p", "%I:%M%p", "%I %p", "%I%p", "%H:%M", "%H"):
+        try:
+            t = datetime.strptime(time_text.strip(), fmt).time()
+            return datetime.combine(base, t)
+        except ValueError:
+            continue
+
+    # Fall back to midnight if no format matched.
+    logger.warning("runner: could not parse time_text=%r; using midnight", time_text)
+    return datetime.combine(base, dt_time(0, 0))
+
+
+async def _run_chosen_pipeline(
+    upload_id: int,
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    stage_delay_seconds: float,
+    cell_delay_seconds: float,
+) -> AsyncGenerator[StageEvent, None]:
+    """Dispatch to the real or fake pipeline based on settings.use_real_pipeline.
+
+    When the real pipeline is active, supply a DB-persisting callback for
+    each extracted event.  When the fake pipeline is active, forward the
+    timing knobs through unchanged.
+
+    Args:
+        upload_id: DB primary key of the Upload row to process.
+        session_factory: Async session maker for the real pipeline's callback.
+        stage_delay_seconds: Passed through to the chosen pipeline.
+        cell_delay_seconds: Passed through to the chosen pipeline.
+
+    Yields:
+        StageEvent from whichever pipeline is active.
+    """
+    settings = get_settings()
+
+    if settings.use_real_pipeline:
+        # Load the upload row to get the image path.
+        async with session_factory() as session:
+            upload = await session.get(Upload, upload_id)
+            if upload is None:
+                return
+            image_path = upload.image_path
+
+        # Load family members for color matching and VLM palette context.
+        async with session_factory() as session:
+            result = await session.execute(select(FamilyMember))
+            family_members = list(result.scalars().all())
+
+        async def on_event_extracted(record: ExtractedEventRecord) -> None:
+            """Persist one extracted event to the DB."""
+            start_dt = _parse_event_datetime(record.cell_date_iso, record.time_text)
+            status = (
+                "auto_published"
+                if record.composite_confidence >= settings.confidence_threshold
+                else "pending_review"
+            )
+            event = Event(
+                upload_id=upload_id,
+                family_member_id=record.family_member_id,
+                title=record.title,
+                start_dt=start_dt,
+                end_dt=None,
+                all_day=record.time_text is None,
+                location=None,
+                notes=None,
+                confidence=record.composite_confidence,
+                status=status,
+                google_event_id=None,
+                cell_crop_path=record.cell_crop_path,
+                raw_vlm_json=record.raw_vlm_json,
+            )
+            async with session_factory() as db:
+                db.add(event)
+                await db.commit()
+
+        async for stage_event in run_pipeline(
+            upload_id,
+            image_path,
+            settings,
+            family_members,
+            stage_delay_seconds=stage_delay_seconds,
+            cell_delay_seconds=cell_delay_seconds,
+            on_event_extracted=on_event_extracted,
+            data_dir=settings.data_dir,
+        ):
+            yield stage_event
+    else:
+        async for stage_event in run_fake_pipeline(
+            upload_id,
+            stage_delay_seconds=stage_delay_seconds,
+            cell_delay_seconds=cell_delay_seconds,
+        ):
+            yield stage_event
 
 
 async def run_pipeline_for_upload(
@@ -36,8 +162,9 @@ async def run_pipeline_for_upload(
     """Background task: run the full pipeline for *upload_id*, writing progress to DB.
 
     Waits in the process-wide queue, acquires the pipeline lock, then runs
-    ``run_fake_pipeline``, persisting each stage transition to the Upload row
-    and recording per-stage durations to ``pipeline_stage_durations``.
+    the chosen pipeline (real or fake), persisting each stage transition to
+    the Upload row and recording per-stage durations to
+    ``pipeline_stage_durations``.
 
     On success: sets upload.status='completed', finished_at, provider.
     On failure: sets upload.status='failed', upload.error, finished_at.
@@ -46,8 +173,8 @@ async def run_pipeline_for_upload(
     Args:
         upload_id: DB primary key of the Upload row to process.
         session_factory: Async session maker (from ``get_session_factory()``).
-        stage_delay_seconds: Passed through to run_fake_pipeline.
-        cell_delay_seconds: Passed through to run_fake_pipeline.
+        stage_delay_seconds: Passed through to the active pipeline.
+        cell_delay_seconds: Passed through to the active pipeline.
     """
     # Spin-wait while queued behind other uploads.  If the upload is dequeued
     # (cancelled) before it reaches the head, abort silently.
@@ -71,12 +198,15 @@ async def run_pipeline_for_upload(
             upload.status = "processing"
             await session.commit()
 
+        settings = get_settings()
+
         try:
             stage_start: dict[str, float] = {}
             prev_stage: str | None = None
 
-            pipeline = run_fake_pipeline(
+            pipeline = _run_chosen_pipeline(
                 upload_id,
+                session_factory,
                 stage_delay_seconds=stage_delay_seconds,
                 cell_delay_seconds=cell_delay_seconds,
             )
@@ -114,7 +244,11 @@ async def run_pipeline_for_upload(
                     if stage_event.stage == "done":
                         upload.status = "completed"
                         upload.finished_at = datetime.now(UTC)
-                        upload.provider = "fake-pipeline-phase-3p5"
+                        upload.provider = (
+                            settings.vision_provider
+                            if settings.use_real_pipeline
+                            else "fake-pipeline-phase-3p5"
+                        )
 
                     await session.commit()
 

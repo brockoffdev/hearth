@@ -1,15 +1,40 @@
-"""Fake pipeline driver for Phase 3 — emits HEARTH_STAGES events on a timer.
+"""Pipeline driver for Hearth upload photos.
 
-Phase 4 replaces the body of run_fake_pipeline (renamed to run_pipeline) with
-real VLM calls; the StageEvent dataclass and HEARTH_STAGES_ORDER constant
-remain unchanged so the SSE endpoint needs no edits.
+Phase 3: run_fake_pipeline — emits HEARTH_STAGES events on a timer.
+Phase 4: run_pipeline — real VLM orchestration:
+    preprocessing → grid detection → per-cell VLM → HSV color match
+    → date normalization → confidence gate → events written to DB via callback.
+
+The StageEvent dataclass and HEARTH_STAGES_ORDER constant are unchanged so
+the SSE endpoint needs no edits between phases.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+import json
+import logging
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
+from dataclasses import asdict, dataclass
+from datetime import date, timedelta
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from backend.app.uploads.color import match_ink_color_async
+from backend.app.uploads.grid_detect import crop_cell, detect_grid
+from backend.app.uploads.preprocessing import preprocess_photo
+from backend.app.uploads.storage import read_photo, store_photo
+from backend.app.vision import (
+    CellPromptContext,
+    FamilyPaletteEntry,
+    get_vision_provider,
+)
+
+if TYPE_CHECKING:
+    from backend.app.config import Settings
+    from backend.app.db.models import FamilyMember
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Stage data
@@ -84,7 +109,7 @@ def estimate_remaining_seconds(completed: list[str]) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Event dataclass
+# Event dataclasses
 # ---------------------------------------------------------------------------
 
 
@@ -99,8 +124,30 @@ class StageEvent:
     remaining_seconds: int | None = None
 
 
+@dataclass(frozen=True)
+class ExtractedEventRecord:
+    """One event extracted from a cell, ready to persist as an Event row.
+
+    Built by run_pipeline for each VLM-detected event and delivered to the
+    runner via the on_event_extracted callback.
+    """
+
+    cell_row: int
+    cell_col: int
+    cell_date_iso: str
+    title: str
+    time_text: str | None
+    color_hex: str | None
+    family_member_id: int | None
+    color_match_confidence: float
+    vision_confidence: float
+    composite_confidence: float
+    raw_vlm_json: str  # the original JSON from the VLM, for audit
+    cell_crop_path: str | None  # the saved crop file path, for review UI
+
+
 # ---------------------------------------------------------------------------
-# Fake pipeline
+# Fake pipeline (Phase 3 — kept as config-toggleable test mode)
 # ---------------------------------------------------------------------------
 
 
@@ -163,3 +210,361 @@ async def run_fake_pipeline(
         # Mark stage as completed after yielding (so "received" event has
         # completed_stages=[], meaning received hasn't finished yet at emit time).
         completed.append(stage_key)
+
+
+# ---------------------------------------------------------------------------
+# Real pipeline (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+async def run_pipeline(
+    upload_id: int,
+    image_path: str,
+    settings: Settings,
+    family_members: Sequence[FamilyMember],
+    *,
+    stage_delay_seconds: float = 0.0,
+    cell_delay_seconds: float = 0.0,
+    few_shot_corrections: Sequence[dict[str, str]] = (),
+    on_event_extracted: Callable[[ExtractedEventRecord], Awaitable[None]] | None = None,
+    data_dir: Path = Path("/data"),
+) -> AsyncGenerator[StageEvent, None]:
+    """Run the real VLM pipeline for one upload.
+
+    Yields StageEvent in order matching HEARTH_STAGES_ORDER.  Same shape as
+    run_fake_pipeline so the SSE consumer doesn't change.
+
+    As each cell yields VLM events, on_event_extracted is called for each
+    ExtractedEventRecord so the runner can persist them without coupling this
+    module to the DB session.
+
+    Args:
+        upload_id: DB primary key of the Upload row being processed.
+        image_path: Relative path to the photo file (relative to data_dir).
+        settings: Application settings; used to build the VisionProvider.
+        family_members: FamilyMember rows for color matching and palette context.
+        stage_delay_seconds: Optional throttle pause between non-cell stages.
+        cell_delay_seconds: Optional throttle pause between cell processing steps.
+        few_shot_corrections: Recent user corrections for few-shot VLM context.
+        on_event_extracted: Async callback fired after each event record is
+            built.  The runner supplies a callback that persists to the DB.
+        data_dir: Root directory for reading and writing photos.
+
+    Yields:
+        StageEvent instances in HEARTH_STAGES_ORDER order.
+    """
+    completed: list[str] = []
+
+    # ------------------------------------------------------------------
+    # Stage 1: received
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="received",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    completed.append("received")
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # Read the photo bytes from disk.
+    raw_bytes = await read_photo(image_path, data_dir)
+
+    # ------------------------------------------------------------------
+    # Stage 2: preprocessing
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="preprocessing",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    preprocessed_bytes = await preprocess_photo(raw_bytes)
+    completed.append("preprocessing")
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # ------------------------------------------------------------------
+    # Stage 3: grid_detected
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="grid_detected",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    grid = await detect_grid(preprocessed_bytes)
+    completed.append("grid_detected")
+
+    if not grid.cells:
+        # Catastrophic failure — no cells to process.  Skip straight to done.
+        logger.warning(
+            "pipeline: upload_id=%d grid detection returned empty cells; "
+            "skipping VLM processing",
+            upload_id,
+        )
+        if stage_delay_seconds > 0:
+            await asyncio.sleep(stage_delay_seconds)
+
+        for skip_stage in (
+            "model_loading",
+            "cell_progress",
+            "color_matching",
+            "date_normalization",
+            "confidence_gating",
+            "publishing",
+        ):
+            yield StageEvent(
+                stage=skip_stage,
+                completed_stages=completed.copy(),
+                remaining_seconds=estimate_remaining_seconds(completed),
+            )
+            completed.append(skip_stage)
+
+        yield StageEvent(
+            stage="done",
+            completed_stages=completed.copy(),
+            remaining_seconds=0,
+        )
+        return
+
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # ------------------------------------------------------------------
+    # Stage 4: model_loading
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="model_loading",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    provider = get_vision_provider(settings)
+    completed.append("model_loading")
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # Build the family palette for VLM context.
+    palette = tuple(
+        FamilyPaletteEntry(
+            name=fm.name,
+            color_label=_color_label_for(fm),
+            color_hex=fm.color_hex_center,
+        )
+        for fm in family_members
+    )
+
+    # ------------------------------------------------------------------
+    # Stage 5: cell_progress (loop over all detected cells)
+    # ------------------------------------------------------------------
+    total_cells = len(grid.cells)
+    today = date.today()
+
+    for i, cell in enumerate(grid.cells, start=1):
+        yield StageEvent(
+            stage="cell_progress",
+            progress={"cell": i, "total": total_cells},
+            completed_stages=completed.copy(),
+            remaining_seconds=estimate_remaining_seconds(completed),
+        )
+
+        # Crop the cell bytes.
+        try:
+            cell_bytes = crop_cell(preprocessed_bytes, cell)
+        except Exception:
+            logger.warning(
+                "pipeline: upload_id=%d failed to crop cell row=%d col=%d; skipping",
+                upload_id, cell.row, cell.col,
+            )
+            continue
+
+        # Save the crop for the review UI (Phase 6 will display it).
+        cell_crop_path: str | None = None
+        try:
+            _sha, rel_path = await store_photo(cell_bytes, "image/jpeg", data_dir)
+            cell_crop_path = rel_path
+        except Exception:
+            logger.warning(
+                "pipeline: upload_id=%d failed to store cell crop row=%d col=%d",
+                upload_id, cell.row, cell.col,
+            )
+
+        # Determine the calendar date for this cell.
+        cell_date_iso = _compute_cell_date_iso(cell, photographed_month=today)
+        cell_label = _format_cell_label(cell_date_iso)
+
+        # Build VLM prompt context.
+        context = CellPromptContext(
+            cell_date_iso=cell_date_iso,
+            cell_label=cell_label,
+            family_palette=palette,
+            few_shot_corrections=tuple(few_shot_corrections),
+        )
+
+        # VLM call — errors are caught per-cell so the pipeline continues.
+        try:
+            vlm_events = await provider.extract_events_from_cell(cell_bytes, context)
+        except Exception as exc:
+            logger.warning(
+                "pipeline: upload_id=%d VLM call failed for cell row=%d col=%d: %s",
+                upload_id, cell.row, cell.col, exc,
+            )
+            vlm_events = ()
+
+        # Color match this cell independently of the VLM result.
+        color_match = await match_ink_color_async(cell_bytes, family_members)
+
+        # Build a record for each VLM-extracted event.
+        for vlm_event in vlm_events:
+            family_member_id = color_match.family_member_id if color_match else None
+            color_match_confidence = color_match.confidence if color_match else 0.0
+
+            # Date confidence: deterministic computation → 1.0 for Phase 4.
+            date_confidence = 1.0
+
+            composite = vlm_event.confidence * max(color_match_confidence, 0.3) * date_confidence
+
+            record = ExtractedEventRecord(
+                cell_row=cell.row,
+                cell_col=cell.col,
+                cell_date_iso=cell_date_iso,
+                title=vlm_event.title,
+                time_text=vlm_event.time_text,
+                color_hex=vlm_event.color_hex,
+                family_member_id=family_member_id,
+                color_match_confidence=color_match_confidence,
+                vision_confidence=vlm_event.confidence,
+                composite_confidence=composite,
+                raw_vlm_json=json.dumps(asdict(vlm_event)),
+                cell_crop_path=cell_crop_path,
+            )
+
+            if on_event_extracted is not None:
+                await on_event_extracted(record)
+
+        if cell_delay_seconds > 0:
+            await asyncio.sleep(cell_delay_seconds)
+
+    completed.append("cell_progress")
+
+    # ------------------------------------------------------------------
+    # Stage 6: color_matching — marker stage (already done per-cell above)
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="color_matching",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    completed.append("color_matching")
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # ------------------------------------------------------------------
+    # Stage 7: date_normalization — marker stage (already done per-cell above)
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="date_normalization",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    completed.append("date_normalization")
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # ------------------------------------------------------------------
+    # Stage 8: confidence_gating
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="confidence_gating",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    completed.append("confidence_gating")
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # ------------------------------------------------------------------
+    # Stage 9: publishing — actual GCal push is Phase 7; marker only here.
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="publishing",
+        completed_stages=completed.copy(),
+        remaining_seconds=estimate_remaining_seconds(completed),
+    )
+    completed.append("publishing")
+    if stage_delay_seconds > 0:
+        await asyncio.sleep(stage_delay_seconds)
+
+    # ------------------------------------------------------------------
+    # Stage 10: done
+    # ------------------------------------------------------------------
+    yield StageEvent(
+        stage="done",
+        completed_stages=completed.copy(),
+        remaining_seconds=0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
+def _color_label_for(fm: FamilyMember) -> str:
+    """Derive a friendly color label from a FamilyMember's color_hex_center.
+
+    Covers the five canonical Hearth ink colors seeded in migration 0002.
+    Falls back to "Unknown" for any unrecognised hex.
+
+    Args:
+        fm: A FamilyMember row (or any object with a color_hex_center attribute).
+
+    Returns:
+        A descriptive label such as "Blue", "Red", "Purple", "Pink", "Orange".
+    """
+    _hex_labels: dict[str, str] = {
+        "#2E5BA8": "Blue",
+        "#C0392B": "Red",
+        "#7B4FB8": "Purple",
+        "#E17AA1": "Pink",
+        "#D97A2C": "Orange",
+    }
+    return _hex_labels.get(fm.color_hex_center.upper(), "Unknown")
+
+
+def _compute_cell_date_iso(cell: object, *, photographed_month: date) -> str:
+    """Compute the ISO date for a grid cell.
+
+    The grid's first row (row 0) starts on the Sunday on or immediately before
+    the first day of *photographed_month*.  Each column is one day of the week
+    (0=Sunday … 6=Saturday); each row is one week.
+
+    Args:
+        cell: An object with ``row`` and ``col`` integer attributes
+            (a :class:`~backend.app.uploads.grid_detect.CellBox`).
+        photographed_month: Any date within the photographed month; only the
+            year and month are used.
+
+    Returns:
+        ISO 8601 date string, e.g. ``"2026-04-27"``.
+    """
+    first_of_month = photographed_month.replace(day=1)
+    # weekday(): Mon=0 … Sun=6.  Days since the preceding Sunday:
+    days_to_sunday = (first_of_month.weekday() + 1) % 7
+    grid_start = first_of_month - timedelta(days=days_to_sunday)
+
+    row: int = cell.row  # type: ignore[attr-defined]
+    col: int = cell.col  # type: ignore[attr-defined]
+    cell_date = grid_start + timedelta(days=row * 7 + col)
+    return cell_date.isoformat()
+
+
+def _format_cell_label(iso_date: str) -> str:
+    """Format an ISO date as a human-friendly cell label.
+
+    Args:
+        iso_date: An ISO 8601 date string, e.g. ``"2026-04-27"``.
+
+    Returns:
+        A string such as ``"Monday April 27"``.
+    """
+    d = date.fromisoformat(iso_date)
+    return d.strftime("%A %B %-d")

@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     # the factory does not auto-swap to provider-specific defaults.
     anthropic_api_key: str = ""
 
+    # When True, POST /api/uploads dispatches the real VLM pipeline
+    # (preprocessing + grid detect + per-cell VLM + color match).
+    # When False (default), uses the fake-stages-on-a-timer pipeline — useful
+    # for UI testing without a running VLM model.
+    # Override via HEARTH_USE_REAL_PIPELINE.
+    use_real_pipeline: bool = False
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).

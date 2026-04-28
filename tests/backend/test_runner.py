@@ -11,6 +11,7 @@ between tests to prevent leakage.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 from sqlalchemy import select
@@ -21,7 +22,7 @@ from backend.app.db.base import get_session_factory
 from backend.app.db.models import PipelineStageDuration, Upload, User
 from backend.app.uploads.pipeline import HEARTH_STAGES_ORDER
 from backend.app.uploads.queue import _reset_for_tests, dequeue, enqueue, queue_position
-from backend.app.uploads.runner import run_pipeline_for_upload
+from backend.app.uploads.runner import _parse_event_datetime, run_pipeline_for_upload
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -217,3 +218,137 @@ async def test_runner_serial_two_uploads(db_engine: AsyncEngine) -> None:
                 assert stage in completed, (
                     f"Stage '{stage}' missing from completed_stages of upload {row.id}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# _parse_event_datetime tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_event_datetime_with_time() -> None:
+    """'8:30 AM' parses to datetime at 08:30."""
+    result = _parse_event_datetime("2026-04-27", "8:30 AM")
+    assert result == datetime(2026, 4, 27, 8, 30)
+
+
+def test_parse_event_datetime_without_time() -> None:
+    """None time_text → midnight (all-day event)."""
+    result = _parse_event_datetime("2026-04-27", None)
+    assert result == datetime(2026, 4, 27, 0, 0)
+
+
+def test_parse_event_datetime_24h_format() -> None:
+    """'14:00' parses correctly in 24-hour format."""
+    result = _parse_event_datetime("2026-04-27", "14:00")
+    assert result == datetime(2026, 4, 27, 14, 0)
+
+
+def test_parse_event_datetime_pm_no_minutes() -> None:
+    """'8 PM' parses to 20:00."""
+    result = _parse_event_datetime("2026-04-27", "8 PM")
+    assert result == datetime(2026, 4, 27, 20, 0)
+
+
+def test_parse_event_datetime_lowercase_pm() -> None:
+    """'8:00pm' (lowercase, no space) parses correctly."""
+    result = _parse_event_datetime("2026-04-27", "8:00pm")
+    assert result == datetime(2026, 4, 27, 20, 0)
+
+
+def test_parse_event_datetime_unparseable_falls_back_to_midnight() -> None:
+    """Unparseable time_text falls back to midnight without raising."""
+    result = _parse_event_datetime("2026-04-27", "not a time")
+    assert result == datetime(2026, 4, 27, 0, 0)
+
+
+# ---------------------------------------------------------------------------
+# Runner dispatch tests
+# ---------------------------------------------------------------------------
+
+
+async def test_runner_uses_fake_pipeline_when_use_real_pipeline_false(
+    db_engine: AsyncEngine,
+) -> None:
+    """Default settings (use_real_pipeline=False) → provider='fake-pipeline-phase-3p5'."""
+    import os
+
+    # Ensure use_real_pipeline is False (default).
+    from backend.app.config import get_settings
+
+    get_settings.cache_clear()
+    os.environ["HEARTH_USE_REAL_PIPELINE"] = "false"
+    try:
+        factory = get_session_factory(db_engine)
+        user_id = await _make_user(db_engine)
+        upload_id = await _make_upload(db_engine, user_id)
+
+        await enqueue(upload_id)
+        await run_pipeline_for_upload(
+            upload_id,
+            factory,
+            stage_delay_seconds=0,
+            cell_delay_seconds=0,
+        )
+
+        async with factory() as session:
+            row = await session.get(Upload, upload_id)
+
+        assert row is not None
+        assert row.status == "completed"
+        assert row.provider == "fake-pipeline-phase-3p5"
+    finally:
+        del os.environ["HEARTH_USE_REAL_PIPELINE"]
+        get_settings.cache_clear()
+
+
+async def test_runner_uses_real_pipeline_when_setting_true(
+    db_engine: AsyncEngine,
+) -> None:
+    """use_real_pipeline=True → runner calls run_pipeline; provider set to vision_provider."""
+    import os
+    from unittest.mock import patch
+
+    from backend.app.config import get_settings
+    from backend.app.uploads.pipeline import HEARTH_STAGES_ORDER, StageEvent
+
+    async def _fake_real_pipeline(*args, **kwargs):  # type: ignore[no-untyped-def]
+        """Stub run_pipeline that yields all standard stages with zero delay."""
+        completed: list[str] = []
+        for stage in HEARTH_STAGES_ORDER:
+            yield StageEvent(
+                stage=stage,
+                completed_stages=completed.copy(),
+                remaining_seconds=0,
+            )
+            completed.append(stage)
+
+    get_settings.cache_clear()
+    os.environ["HEARTH_USE_REAL_PIPELINE"] = "true"
+    try:
+        factory = get_session_factory(db_engine)
+        user_id = await _make_user(db_engine)
+        upload_id = await _make_upload(db_engine, user_id)
+
+        await enqueue(upload_id)
+
+        with patch(
+            "backend.app.uploads.runner.run_pipeline",
+            side_effect=_fake_real_pipeline,
+        ):
+            await run_pipeline_for_upload(
+                upload_id,
+                factory,
+                stage_delay_seconds=0,
+                cell_delay_seconds=0,
+            )
+
+        async with factory() as session:
+            row = await session.get(Upload, upload_id)
+
+        assert row is not None
+        assert row.status == "completed"
+        # Provider should be the vision_provider setting, not the fake label.
+        assert row.provider == "ollama"  # default vision_provider
+    finally:
+        del os.environ["HEARTH_USE_REAL_PIPELINE"]
+        get_settings.cache_clear()
