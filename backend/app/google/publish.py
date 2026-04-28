@@ -74,13 +74,20 @@ async def _get_setting(session: AsyncSession, key: str) -> str | None:
     return row.value if row is not None else None
 
 
-def _build_event_body(event: Event) -> dict[str, Any]:
-    """Build the GCal event body dict from an Event row."""
-    footer = (
-        f"\n\n— Auto-imported by Hearth on {datetime.now(UTC).date().isoformat()} "
-        f"from upload #{event.upload_id}"
-    )
-    description = ((event.notes or "") + footer).strip()
+def _build_event_body(event: Event, *, is_insert: bool) -> dict[str, Any]:
+    """Build the GCal event body dict from an Event row.
+
+    The traceability footer is appended only on insert; patch calls re-send
+    the user's notes verbatim so successive edits don't accumulate footers.
+    """
+    if is_insert:
+        footer = (
+            f"\n\n— Auto-imported by Hearth on {datetime.now(UTC).date().isoformat()} "
+            f"from upload #{event.upload_id}"
+        )
+        description = ((event.notes or "") + footer).strip()
+    else:
+        description = (event.notes or "").strip()
 
     if event.all_day:
         start_date = event.start_dt.date()
@@ -209,13 +216,15 @@ async def publish_event(
 
     creds, _ = await _resolve_credentials(session, _settings)
     calendar_id = await _resolve_calendar_id(session, event)
-    event_body = _build_event_body(event)
+    is_insert = event.google_event_id is None
+    event_body = _build_event_body(event, is_insert=is_insert)
 
     try:
-        if event.google_event_id is None:
+        if is_insert:
             gcal_result = await insert_event(creds, calendar_id, event_body)
             event.google_event_id = gcal_result["id"]
         else:
+            assert event.google_event_id is not None  # is_insert == False
             await patch_event(creds, calendar_id, event.google_event_id, event_body)
     except HttpError as exc:
         raise GcalError(str(exc), status_code=exc.resp.status) from exc

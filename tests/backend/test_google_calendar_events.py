@@ -732,6 +732,53 @@ async def test_publish_event_includes_description_footer(
     assert "from upload #" in desc
 
 
+async def test_publish_event_omits_footer_on_patch(
+    db_engine: AsyncEngine,
+) -> None:
+    """Patch (re-publish) sends notes verbatim; no footer accumulation."""
+    member = await _insert_family_member(db_engine)
+    await _insert_oauth_token(db_engine)
+    await _insert_oauth_credentials(db_engine)
+    event = await _insert_event(
+        db_engine,
+        family_member_id=member.id,
+        notes="Birthday party",
+        google_event_id="existing-gcal-id",
+    )
+
+    captured_body: dict[str, Any] = {}
+
+    async def _capture_patch(
+        creds: Any,
+        calendar_id: str,
+        event_id: str,
+        event_body: dict[str, Any],
+    ) -> dict[str, Any]:
+        captured_body.update(event_body)
+        return {
+            "id": event_id,
+            "htmlLink": "",
+            "status": "confirmed",
+            "updated": "",
+            "extendedProperties": {},
+        }
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        with (
+            patch(
+                "backend.app.google.publish.credentials_for",
+                new=_mock_credentials_for(),
+            ),
+            patch("backend.app.google.publish.patch_event", side_effect=_capture_patch),
+        ):
+            await publish_event(session, event.id)
+
+    desc = captured_body["description"]
+    assert desc == "Birthday party"
+    assert "Auto-imported by Hearth" not in desc
+
+
 # ---------------------------------------------------------------------------
 # Part 2: unpublish_event tests
 # ---------------------------------------------------------------------------
