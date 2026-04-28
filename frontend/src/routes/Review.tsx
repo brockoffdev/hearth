@@ -107,7 +107,7 @@ export function Review(): JSX.Element {
         )}
       </div>
 
-      <MobileTabBar active="review" />
+      <MobileTabBar active="review" badges={{ review: 0 }} />
     </div>
   );
 }

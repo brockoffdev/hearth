@@ -214,6 +214,48 @@
   flex: 1;
 }
 
+/* ─── Demotion warning card ──────────────────────────────────── */
+
+.demotedCard {
+  margin: 12px 22px 0;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.demotedHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.demotedIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--warn);
+}
+
+.demotedReason {
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.4;
+}
+
+.demotedError {
+  font-size: 13px;
+  color: var(--danger);
+  line-height: 1.4;
+}
+
+.demotedLink {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 /* ─── Loading / error states ─────────────────────────────────── */
 
 .centered {

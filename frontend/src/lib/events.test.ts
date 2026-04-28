@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { listEvents, getEvent, patchEvent, rejectEvent, cellCropUrl } from './events';
+import { listEvents, getEvent, patchEvent, rejectEvent, getPendingCount, republishEvent, cellCropUrl } from './events';
 import type { Event, EventList } from './events';
 
 function makeResponse(status: number, body: unknown): Response {
@@ -199,6 +199,78 @@ describe('rejectEvent', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(404, { detail: 'Not found' })));
 
     await expect(rejectEvent(999)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPendingCount
+// ---------------------------------------------------------------------------
+
+describe('getPendingCount', () => {
+  it('calls GET /api/events/pending-count and returns the count', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse(200, { count: 5 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getPendingCount();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/events/pending-count',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    expect(result).toBe(5);
+  });
+
+  it('returns 0 when count is 0', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(200, { count: 0 })));
+    expect(await getPendingCount()).toBe(0);
+  });
+
+  it('propagates ApiError on non-OK response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(401, { detail: 'Unauthorized' })));
+    await expect(getPendingCount()).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// republishEvent
+// ---------------------------------------------------------------------------
+
+describe('republishEvent', () => {
+  it('calls POST /api/events/:id/republish and returns the event', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse(200, MOCK_EVENT));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await republishEvent(42);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/events/42/republish');
+    expect(init.method).toBe('POST');
+    expect(result).toEqual(MOCK_EVENT);
+  });
+
+  it('accepts a string id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse(200, MOCK_EVENT));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await republishEvent('42');
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toBe('/api/events/42/republish');
+  });
+
+  it('propagates ApiError on 503', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(503, { detail: 'NoOauth' })));
+    await expect(republishEvent(42)).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('propagates ApiError on 400', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(400, { detail: 'NoCalendar' })));
+    await expect(republishEvent(42)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('propagates ApiError on 502', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeResponse(502, { detail: 'GcalError' })));
+    await expect(republishEvent(42)).rejects.toMatchObject({ status: 502 });
   });
 });
 

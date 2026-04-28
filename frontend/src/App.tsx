@@ -16,7 +16,6 @@ import { AdminUsers } from './routes/AdminUsers';
 import { AdminSettings } from './routes/AdminSettings';
 import { RequireAuth } from './auth/RequireAuth';
 import { WizardGate } from './auth/WizardGate';
-// TODO: Phase 8 Task C — add desktop sidebar with Admin sub-nav links
 
 /**
  * Route structure:

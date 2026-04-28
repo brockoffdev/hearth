@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import type { JSX } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getEvent, listEvents, patchEvent, rejectEvent, cellCropUrl } from '../lib/events';
+import { getEvent, listEvents, patchEvent, rejectEvent, republishEvent, cellCropUrl } from '../lib/events';
 import type { Event } from '../lib/events';
 import { listFamily } from '../lib/family';
 import type { ApiFamilyMember } from '../lib/family';
@@ -72,6 +72,9 @@ export function ReviewItem(): JSX.Element {
   const [queue, setQueue] = useState<Event[] | null>(null);
   const [familyMembers, setFamilyMembers] = useState<ApiFamilyMember[]>([]);
   const [saving, setSaving] = useState(false);
+  const [republishing, setRepublishing] = useState(false);
+  const [republishError, setRepublishError] = useState<string | null>(null);
+  const [republishSuccess, setRepublishSuccess] = useState(false);
 
   // Load the event
   useEffect(() => {
@@ -129,6 +132,14 @@ export function ReviewItem(): JSX.Element {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Detect auto-publish demotion trailer in notes field
+  const loadedEvent = loadPhase.phase === 'ready' ? loadPhase.event : null;
+  const demotionMatch = useMemo(() => {
+    if (!loadedEvent?.notes) return null;
+    const m = loadedEvent.notes.match(/\[Auto-publish failed: ([^\]]*)\]\s*$/);
+    return m ? m[1] : null;
+  }, [loadedEvent?.notes]);
 
   // Navigate to the next pending_review item, or /review if none
   const navigateNext = useCallback(() => {
@@ -199,6 +210,31 @@ export function ReviewItem(): JSX.Element {
     }
   };
 
+  const handleRepublish = async () => {
+    setRepublishing(true);
+    setRepublishError(null);
+    setRepublishSuccess(false);
+    try {
+      await republishEvent(eventId);
+      setRepublishSuccess(true);
+      setTimeout(() => navigateNext(), 800);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 503) {
+          setRepublishError('reconnect_google');
+        } else if (err.status === 400) {
+          setRepublishError('no_calendar');
+        } else {
+          setRepublishError('gcal');
+        }
+      } else {
+        setRepublishError('gcal');
+      }
+    } finally {
+      setRepublishing(false);
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Error states
   // ---------------------------------------------------------------------------
@@ -258,6 +294,61 @@ export function ReviewItem(): JSX.Element {
         <div className={styles.titleBlock}>
           <h1 className={styles.pageTitle}>What did the calendar say?</h1>
         </div>
+
+        {/* Demotion warning + Republish affordance */}
+        {demotionMatch !== null && (
+          <div className={styles.demotedCard} data-testid="demoted-card">
+            <div className={styles.demotedHeader}>
+              <svg
+                className={styles.demotedIcon}
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className={styles.demotedReason}>
+                Auto-publish failed: {demotionMatch}
+              </span>
+            </div>
+            {republishError === 'reconnect_google' && (
+              <p className={styles.demotedError}>
+                Reconnect Google in{' '}
+                <Link to="/setup/google" className={styles.demotedLink}>/setup/google</Link>
+              </p>
+            )}
+            {republishError === 'no_calendar' && (
+              <p className={styles.demotedError}>
+                This event has no family member assigned — pick one and save instead.
+              </p>
+            )}
+            {republishError === 'gcal' && (
+              <p className={styles.demotedError}>
+                Google Calendar error — try again.
+              </p>
+            )}
+            {republishSuccess && (
+              <p className={styles.demotedReason}>Republished!</p>
+            )}
+            <HBtn
+              kind="primary"
+              size="lg"
+              className={styles.saveBtn}
+              onClick={() => void handleRepublish()}
+              disabled={republishing || republishSuccess}
+            >
+              {republishing ? 'Republishing…' : 'Republish'}
+            </HBtn>
+          </div>
+        )}
 
         {/* Cell crop */}
         {event.has_cell_crop && (

@@ -148,6 +148,7 @@ async def _create_event(
     created_at: datetime | None = None,
     cell_crop_path: str | None = None,
     google_event_id: str | None = None,
+    notes: str | None = None,
 ) -> Event:
     factory = get_session_factory(db_engine)
     async with factory() as session:
@@ -159,6 +160,7 @@ async def _create_event(
             status=status,
             cell_crop_path=cell_crop_path,
             google_event_id=google_event_id,
+            notes=notes,
         )
         if created_at is not None:
             ev.created_at = created_at
@@ -1436,3 +1438,327 @@ async def test_delete_event_logs_exception_on_unpublish_unexpected_error(
 
     assert resp.status_code == 204
     assert mock_logger.exception.called
+
+
+# ---------------------------------------------------------------------------
+# Tests — pending-count (Phase 10 Task A)
+# ---------------------------------------------------------------------------
+
+
+async def test_pending_count_returns_total_for_admin(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Admin sees a count of all pending_review events regardless of owner."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+
+    for _ in range(3):
+        await _create_event(db_engine, upload_id=upload.id, status="pending_review")
+
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        resp = await ac.get("/api/events/pending-count")
+
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 3
+
+
+async def test_pending_count_returns_user_scoped_for_non_admin(
+    db_engine: AsyncEngine,
+) -> None:
+    """Admin sees all 3 pending events; regular user only sees their 1."""
+    factory = get_session_factory(db_engine)
+    await ensure_bootstrap_admin(factory)
+
+    admin = await _get_admin_user(db_engine)
+    admin_upload = await _create_upload(db_engine, admin.id)
+    for _ in range(3):
+        await _create_event(db_engine, upload_id=admin_upload.id, status="pending_review")
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        regular_user = await _login_regular(ac, db_engine)
+        regular_upload = await _create_upload(db_engine, regular_user.id)
+        await _create_event(db_engine, upload_id=regular_upload.id, status="pending_review")
+
+        resp = await ac.get("/api/events/pending-count")
+
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 1
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        await _login_admin(ac)
+        resp2 = await ac.get("/api/events/pending-count")
+
+    assert resp2.status_code == 200
+    assert resp2.json()["count"] == 4
+
+
+async def test_pending_count_excludes_other_statuses(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Only pending_review events are counted; other statuses are excluded."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+
+    await _create_event(db_engine, upload_id=upload.id, status="pending_review")
+    await _create_event(db_engine, upload_id=upload.id, status="auto_published")
+    await _create_event(db_engine, upload_id=upload.id, status="published")
+    await _create_event(db_engine, upload_id=upload.id, status="rejected")
+    await _create_event(db_engine, upload_id=upload.id, status="superseded")
+
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        resp = await ac.get("/api/events/pending-count")
+
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 1
+
+
+async def test_pending_count_requires_auth(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """GET /api/events/pending-count returns 401 when not authenticated."""
+    async with bootstrapped_client as ac:
+        resp = await ac.get("/api/events/pending-count")
+
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Tests — republish (Phase 10 Task A)
+# ---------------------------------------------------------------------------
+
+
+async def test_republish_event_calls_publish_and_strips_note(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Successful republish sets status=published and strips the failure trailer from notes."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="pending_review",
+        notes="Original note\n\n[Auto-publish failed: calendar error]",
+    )
+
+    with patch("backend.app.api.events.publish_event", new=AsyncMock(return_value=event)):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.post(f"/api/events/{event.id}/republish")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "published"
+    assert "[Auto-publish failed:" not in (body["notes"] or "")
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "published"
+    assert "[Auto-publish failed:" not in (fetched.notes or "")
+
+
+async def test_republish_event_400_when_not_pending_review(
+    db_engine: AsyncEngine,
+) -> None:
+    """POST /republish returns 400 when event status is not pending_review."""
+    factory = get_session_factory(db_engine)
+    await ensure_bootstrap_admin(factory)
+
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+
+    for bad_status in ("auto_published", "published", "rejected"):
+        event = await _create_event(db_engine, upload_id=upload.id, status=bad_status)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            await _login_admin(ac)
+            resp = await ac.post(f"/api/events/{event.id}/republish")
+        assert resp.status_code == 400, f"Expected 400 for status={bad_status}"
+        assert "cannot republish" in resp.json()["detail"]
+
+
+async def test_republish_event_503_on_no_oauth(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """NoOauthError from publish_event → 503; status stays pending_review; notes unchanged."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    failure_notes = "Some note\n\n[Auto-publish failed: no oauth]"
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="pending_review",
+        notes=failure_notes,
+    )
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=NoOauthError("no token")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.post(f"/api/events/{event.id}/republish")
+
+    assert resp.status_code == 503
+    assert "Google Calendar not connected" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+    assert fetched.notes == failure_notes
+
+
+async def test_republish_event_400_on_no_calendar(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """NoCalendarError from publish_event → 400; status stays pending_review."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id, status="pending_review")
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=NoCalendarError("no calendar")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.post(f"/api/events/{event.id}/republish")
+
+    assert resp.status_code == 400
+    assert "no Google Calendar mapping" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+
+
+async def test_republish_event_502_on_gcal_error(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """GcalError from publish_event → 502; status stays pending_review."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id, status="pending_review")
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=GcalError("quota exceeded", status_code=429)),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.post(f"/api/events/{event.id}/republish")
+
+    assert resp.status_code == 502
+    assert "Google Calendar error" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+
+
+async def test_republish_event_404_when_missing(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """POST /api/events/99999/republish returns 404 when the event doesn't exist."""
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        resp = await ac.post("/api/events/99999/republish")
+
+    assert resp.status_code == 404
+
+
+async def test_republish_event_403_when_other_user_non_admin(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Non-admin cannot republish another user's event."""
+    admin = await _get_admin_user(db_engine)
+    admin_upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine, upload_id=admin_upload.id, status="pending_review"
+    )
+
+    async with bootstrapped_client as ac:
+        await _login_regular(ac, db_engine)
+        resp = await ac.post(f"/api/events/{event.id}/republish")
+
+    assert resp.status_code == 403
+
+
+async def test_republish_event_handles_notes_with_no_trailer(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Republish on an event with regular notes preserves notes verbatim."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    regular_notes = "This is a normal note without any trailer"
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="pending_review",
+        notes=regular_notes,
+    )
+
+    with patch("backend.app.api.events.publish_event", new=AsyncMock(return_value=event)):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.post(f"/api/events/{event.id}/republish")
+
+    assert resp.status_code == 200
+    assert resp.json()["notes"] == regular_notes
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.notes == regular_notes
+
+
+async def test_republish_event_clears_notes_to_null_when_only_trailer(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """When notes was only the failure trailer, after republish notes becomes None."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="pending_review",
+        notes="\n\n[Auto-publish failed: x]",
+    )
+
+    with patch("backend.app.api.events.publish_event", new=AsyncMock(return_value=event)):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.post(f"/api/events/{event.id}/republish")
+
+    assert resp.status_code == 200
+    assert resp.json()["notes"] is None
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.notes is None

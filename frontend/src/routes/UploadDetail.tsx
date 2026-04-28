@@ -16,6 +16,7 @@ import { HearthWordmark } from '../components/HearthWordmark';
 import { SectionRule } from '../components/SectionRule';
 import { EventCard } from '../components/EventCard';
 import { MobileTabBar } from '../components/MobileTabBar';
+import { usePendingCount } from '../lib/usePendingCount';
 import { cn } from '../lib/cn';
 import { ApiError } from '../lib/api';
 import styles from './UploadDetail.module.css';
@@ -140,6 +141,7 @@ interface ResultsViewProps {
 
 function ResultsView({ events, isLoading }: ResultsViewProps): JSX.Element {
   const navigate = useNavigate();
+  const { count: pendingCount } = usePendingCount();
 
   const auto = events.filter((e) => e.status === 'auto_published');
   const review = events.filter((e) => e.status === 'pending_review');
@@ -220,7 +222,7 @@ function ResultsView({ events, isLoading }: ResultsViewProps): JSX.Element {
 
       <div className={styles.resultsBottom} />
 
-      <MobileTabBar active="uploads" />
+      <MobileTabBar active="uploads" badges={{ review: pendingCount }} />
     </div>
   );
 }

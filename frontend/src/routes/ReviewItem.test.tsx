@@ -16,6 +16,7 @@ vi.mock('../lib/events', () => ({
   listEvents: vi.fn(),
   patchEvent: vi.fn(),
   rejectEvent: vi.fn(),
+  republishEvent: vi.fn(),
   cellCropUrl: (id: number) => `/api/events/${id}/cell-crop`,
 }));
 
@@ -26,6 +27,7 @@ vi.mock('../lib/family', () => ({
 
 import * as eventsModule from '../lib/events';
 import * as familyModule from '../lib/family';
+import { ApiError } from '../lib/api';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -357,5 +359,84 @@ describe('ReviewItem route', () => {
 
     const saveBtn = screen.getByText(/looks good — save/i);
     expect(saveBtn.closest('button')).toBeDisabled();
+  });
+
+  it('test_review_item_renders_republish_affordance_for_demoted_event', async () => {
+    const demotedEvent = makeEvent({
+      notes: 'Some notes\n\n[Auto-publish failed: token expired]',
+    });
+    vi.mocked(eventsModule.getEvent).mockResolvedValue(demotedEvent);
+    vi.mocked(eventsModule.listEvents).mockResolvedValue({ items: QUEUE, total: 4 } as EventList);
+    vi.mocked(familyModule.listFamily).mockResolvedValue(MOCK_FAMILY);
+
+    renderReviewItem();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('demoted-card')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Auto-publish failed: token expired/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /republish/i })).toBeInTheDocument();
+  });
+
+  it('test_review_item_no_republish_affordance_for_normal_pending_review', async () => {
+    vi.mocked(eventsModule.getEvent).mockResolvedValue(makeEvent({ notes: null }));
+    vi.mocked(eventsModule.listEvents).mockResolvedValue({ items: QUEUE, total: 4 } as EventList);
+    vi.mocked(familyModule.listFamily).mockResolvedValue(MOCK_FAMILY);
+
+    renderReviewItem();
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Soccer practice')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('demoted-card')).not.toBeInTheDocument();
+  });
+
+  it('test_review_item_republish_calls_api_and_navigates', async () => {
+    const demotedEvent = makeEvent({
+      id: 44,
+      title: 'Ballet class',
+      notes: 'Note\n\n[Auto-publish failed: token expired]',
+    });
+    vi.mocked(eventsModule.getEvent).mockResolvedValue(demotedEvent);
+    vi.mocked(eventsModule.listEvents).mockResolvedValue({ items: QUEUE, total: 4 } as EventList);
+    vi.mocked(familyModule.listFamily).mockResolvedValue(MOCK_FAMILY);
+    vi.mocked(eventsModule.republishEvent).mockResolvedValue(demotedEvent);
+
+    renderReviewItem(44, '/review/44');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('demoted-card')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /republish/i }));
+    });
+
+    expect(eventsModule.republishEvent).toHaveBeenCalledWith(44);
+  });
+
+  it('test_review_item_republish_shows_503_error_inline', async () => {
+    const demotedEvent = makeEvent({
+      notes: 'Note\n\n[Auto-publish failed: token expired]',
+    });
+    vi.mocked(eventsModule.getEvent).mockResolvedValue(demotedEvent);
+    vi.mocked(eventsModule.listEvents).mockResolvedValue({ items: QUEUE, total: 4 } as EventList);
+    vi.mocked(familyModule.listFamily).mockResolvedValue(MOCK_FAMILY);
+    vi.mocked(eventsModule.republishEvent).mockRejectedValue(new ApiError(503, 'NoOauth'));
+
+    renderReviewItem();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('demoted-card')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /republish/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Reconnect Google in/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: '/setup/google' })).toBeInTheDocument();
   });
 });

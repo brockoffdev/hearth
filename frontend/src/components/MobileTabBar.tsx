@@ -18,6 +18,7 @@ export interface Tab {
 export interface MobileTabBarProps {
   active: TabId;
   className?: string;
+  badges?: Partial<Record<TabId, number>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -35,11 +36,13 @@ export const TABS: readonly Tab[] = [
 // Component
 // ---------------------------------------------------------------------------
 
-export function MobileTabBar({ active, className }: MobileTabBarProps): JSX.Element {
+export function MobileTabBar({ active, className, badges }: MobileTabBarProps): JSX.Element {
   return (
     <nav className={cn(styles.bar, className)} aria-label="Primary">
       {TABS.map((tab) => {
         const isActive = tab.id === active;
+        const badgeCount = badges?.[tab.id] ?? 0;
+        const showBadge = badgeCount > 0;
         return (
           <Link
             key={tab.id}
@@ -48,15 +51,22 @@ export function MobileTabBar({ active, className }: MobileTabBarProps): JSX.Elem
             data-active={isActive}
             aria-current={isActive ? 'page' : undefined}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d={tab.icon}
-                stroke="currentColor"
-                strokeWidth={isActive ? 2 : 1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <div className={styles.iconWrap}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d={tab.icon}
+                  stroke="currentColor"
+                  strokeWidth={isActive ? 2 : 1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {showBadge && (
+                <span className={styles.badge} aria-label={`${badgeCount} pending`}>
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              )}
+            </div>
             <span className={styles.label}>{tab.label}</span>
           </Link>
         );

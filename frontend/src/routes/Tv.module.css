@@ -523,6 +523,23 @@
   opacity: 0.45;
 }
 
+/* ── Extended-stale banner ───────────────────────────────────── */
+.staleBanner {
+  position: absolute;
+  bottom: 48px;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: rgba(217, 122, 44, 0.18);
+  border-top: 1px solid rgba(217, 122, 44, 0.35);
+  color: #D97A2C;
+  font-family: var(--fontMono, monospace);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  padding: 8px 56px;
+  text-align: center;
+}
+
 /* ── Portrait media query ────────────────────────────────────── */
 @media (orientation: portrait) {
   .masthead {
@@ -554,6 +571,11 @@
   }
 
   .pageFooter {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .staleBanner {
     padding-left: 24px;
     padding-right: 24px;
   }

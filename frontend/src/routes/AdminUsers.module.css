@@ -360,4 +360,12 @@
   .actions {
     justify-content: flex-start;
   }
+
+  /* Ensure action buttons meet 44×44 touch target minimum on mobile */
+  .actions button,
+  .pwForm button {
+    min-height: 44px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }

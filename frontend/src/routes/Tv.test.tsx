@@ -211,4 +211,101 @@ describe('Tv', () => {
     // Rendered correctly — "Soccer practice" appears on the page
     expect(screen.getAllByText(/Soccer practice/).length).toBeGreaterThan(0);
   });
+
+  it('test_tv_does_not_show_banner_when_fresh', async () => {
+    vi.mocked(tvModule.getTvSnapshot).mockResolvedValue(makeSnapshot());
+    await renderAndLoad();
+
+    expect(screen.queryByTestId('stale-banner')).toBeNull();
+  });
+
+  it('test_tv_does_not_show_banner_below_30min_staleness', async () => {
+    // First fetch succeeds; all subsequent fail so isStale becomes true.
+    vi.mocked(tvModule.getTvSnapshot)
+      .mockResolvedValueOnce(makeSnapshot())
+      .mockRejectedValue(new Error('network error'));
+
+    await renderAndLoad();
+
+    // Second poll fires and fails — isStale = true, firstStaleAt set.
+    await act(async () => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Only 10 minutes of staleness — banner must not appear yet.
+    act(() => { vi.advanceTimersByTime(10 * 60 * 1000); });
+
+    expect(screen.queryByTestId('stale-banner')).toBeNull();
+  });
+
+  it('test_tv_shows_banner_after_30min_staleness', async () => {
+    vi.mocked(tvModule.getTvSnapshot)
+      .mockResolvedValueOnce(makeSnapshot())
+      .mockRejectedValue(new Error('network error'));
+
+    await renderAndLoad();
+
+    // Second poll fires and fails — sets firstStaleAt.
+    await act(async () => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Advance enough polls so the component re-renders with extendedStale = true.
+    // Each poll is every 5 min; after 31 more minutes of polling the computed
+    // extendedStale expression (Date.now() - firstStaleAt > 30 min) becomes true.
+    await act(async () => {
+      vi.advanceTimersByTime(31 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('stale-banner')).toBeDefined();
+  });
+
+  it('test_tv_clears_banner_when_fetch_recovers', async () => {
+    const snap = makeSnapshot();
+    vi.mocked(tvModule.getTvSnapshot)
+      .mockResolvedValueOnce(snap)
+      .mockRejectedValue(new Error('network error'));
+
+    await renderAndLoad();
+
+    // Let staleness accumulate past 30 min.
+    await act(async () => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(31 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('stale-banner')).toBeDefined();
+
+    // Next two fetches succeed — banner clears only after sustained recovery.
+    vi.mocked(tvModule.getTvSnapshot).mockResolvedValue(snap);
+
+    await act(async () => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // After one healthy poll the watermark hasn't cleared yet.
+    expect(screen.getByTestId('stale-banner')).toBeDefined();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId('stale-banner')).toBeNull();
+  });
 });
