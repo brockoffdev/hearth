@@ -113,11 +113,20 @@ async def vision_health(
             error=str(exc),
         )
 
-    healthy = await provider.health_check()
+    try:
+        healthy = await provider.health_check()
+        error = None if healthy else "provider unreachable"
+    except Exception as exc:
+        # health_check should never raise per the Protocol contract, but
+        # honor the docstring's "Returns 200 in all cases" promise even
+        # when a provider misbehaves.
+        healthy = False
+        error = f"health check raised: {exc}"
+
     return VisionHealthResponse(
         provider=settings.vision_provider,
         model=settings.vision_model,
         name=provider.name,
         healthy=healthy,
-        error=None if healthy else "provider unreachable",
+        error=error,
     )

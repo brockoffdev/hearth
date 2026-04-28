@@ -117,6 +117,29 @@ async def test_vision_health_returns_unhealthy_when_provider_fails(
     assert len(body["error"]) > 0
 
 
+async def test_vision_health_handles_health_check_raising(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """A buggy provider whose health_check() raises maps to 200 + healthy=false."""
+    with patch(
+        "backend.app.api.admin.get_vision_provider"
+    ) as mock_factory:
+        mock_provider = AsyncMock()
+        mock_provider.name = "ollama:qwen2.5-vl:7b"
+        mock_provider.health_check = AsyncMock(side_effect=RuntimeError("boom"))
+        mock_factory.return_value = mock_provider
+
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.get("/api/admin/vision/health")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["healthy"] is False
+    assert body["error"] is not None
+    assert "boom" in body["error"]
+
+
 async def test_vision_health_handles_factory_error(
     bootstrapped_client: AsyncClient,
 ) -> None:
