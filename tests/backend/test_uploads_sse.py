@@ -20,9 +20,9 @@ from backend.app.auth.bootstrap import ensure_bootstrap_admin
 from backend.app.auth.passwords import hash_password
 from backend.app.config import get_settings
 from backend.app.db.base import get_session_factory
-from backend.app.db.models import Upload, User
+from backend.app.db.models import PipelineStageDuration, Upload, User
 from backend.app.main import create_app
-from backend.app.uploads.pipeline import FAKE_TOTAL_CELLS
+from backend.app.uploads.pipeline import FAKE_TOTAL_CELLS, HEARTH_STAGES_ORDER
 
 # ---------------------------------------------------------------------------
 # Minimal fake JPEG bytes (same as test_uploads_endpoints.py)
@@ -351,3 +351,115 @@ async def test_sse_event_format_uses_named_event_stage_update(
     assert first_payload["stage"] == "received"
     assert first_payload["message"] is None
     assert first_payload["progress"] is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.5: completed_stages + remaining_seconds in SSE events
+# ---------------------------------------------------------------------------
+
+
+async def test_sse_events_include_completed_stages_and_remaining_seconds(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """SSE events carry completed_stages list and remaining_seconds ETA."""
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        upload_id = await _post_upload(ac)
+
+        async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
+            assert resp.status_code == 200
+            events = await _read_sse_events(resp)
+
+    payloads = [json.loads(e["data"]) for e in events if "data" in e]
+
+    # Every event should carry completed_stages and remaining_seconds.
+    for payload in payloads:
+        assert "completed_stages" in payload, (
+            f"missing completed_stages on stage '{payload.get('stage')}'"
+        )
+        assert "remaining_seconds" in payload, (
+            f"missing remaining_seconds on stage '{payload.get('stage')}'"
+        )
+
+    # First event ('received') should have empty completed_stages.
+    first = payloads[0]
+    assert first["stage"] == "received"
+    assert first["completed_stages"] == []
+
+    # remaining_seconds should be non-negative.
+    for payload in payloads:
+        if payload["remaining_seconds"] is not None:
+            assert payload["remaining_seconds"] >= 0
+
+
+async def test_sse_writes_current_stage_and_completed_stages_to_db(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """After SSE stream, Upload row has current_stage='done' and all stages in completed_stages."""
+    factory = get_session_factory(db_engine)
+
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        upload_id = await _post_upload(ac)
+
+        # Consume the full SSE stream.
+        async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
+            assert resp.status_code == 200
+            await _read_sse_events(resp)
+
+    async with factory() as session:
+        result = await session.execute(select(Upload).where(Upload.id == upload_id))
+        row = result.scalar_one()
+
+    # After completion, current_stage should be 'done'.
+    assert row.current_stage == "done"
+    # completed_stages should be a JSON array of all stages.
+    completed = json.loads(row.completed_stages)
+    assert isinstance(completed, list)
+    # All stages except 'done' itself should be in completed_stages at emit time for 'done'.
+    for stage in HEARTH_STAGES_ORDER:
+        if stage != "done":
+            assert stage in completed, f"Stage '{stage}' missing from completed_stages after run"
+
+    # cell_progress should show the last cell.
+    assert row.cell_progress == FAKE_TOTAL_CELLS
+    assert row.total_cells == FAKE_TOTAL_CELLS
+
+
+async def test_sse_records_pipeline_stage_duration_rows(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """After SSE stream, pipeline_stage_durations table has one row per stage."""
+    factory = get_session_factory(db_engine)
+
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        upload_id = await _post_upload(ac)
+
+        async with ac.stream("GET", f"/api/uploads/{upload_id}/events") as resp:
+            assert resp.status_code == 200
+            await _read_sse_events(resp)
+
+    async with factory() as session:
+        result = await session.execute(
+            select(PipelineStageDuration).where(
+                PipelineStageDuration.upload_id == upload_id
+            )
+        )
+        duration_rows = list(result.scalars().all())
+
+    # One duration row per stage (cell_progress is one stage).
+    # Number of unique stages = len(HEARTH_STAGES_ORDER).
+    recorded_stages = {r.stage for r in duration_rows}
+    assert len(duration_rows) == len(HEARTH_STAGES_ORDER), (
+        f"Expected {len(HEARTH_STAGES_ORDER)} duration rows, got {len(duration_rows)}: "
+        f"{recorded_stages}"
+    )
+
+    for row in duration_rows:
+        assert row.duration_seconds >= 0.0, (
+            f"Stage '{row.stage}' has negative duration: {row.duration_seconds}"
+        )
+        assert row.upload_id == upload_id
