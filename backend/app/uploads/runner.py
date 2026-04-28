@@ -33,7 +33,7 @@ from backend.app.uploads.pipeline import (
     run_fake_pipeline,
     run_pipeline,
 )
-from backend.app.uploads.queue import acquire_pipeline_slot, queue_position
+from backend.app.uploads.queue import acquire_pipeline_slot, enqueue, queue_position
 
 logger = logging.getLogger(__name__)
 
@@ -279,3 +279,58 @@ async def run_pipeline_for_upload(
                     upload.finished_at = datetime.now(UTC)
                     await session.commit()
             raise
+
+
+# Module-level set to prevent GC of recovery tasks before they complete.
+_recovery_tasks: set[asyncio.Task[None]] = set()
+
+
+async def recover_pending_uploads(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> int:
+    """On server boot, scan for stranded uploads and re-enqueue them.
+
+    Phase 3.5's queue is process-local; if the server crashes mid-pipeline
+    a row stays in status='processing' or 'queued' forever.  This sweep:
+      1. Finds all Upload WHERE status IN ('queued', 'processing').
+      2. Resets 'processing' → 'queued' (we're starting from scratch).
+      3. Clears all partial-progress fields.
+      4. enqueue()s each one + creates an asyncio.Task for run_pipeline_for_upload.
+
+    Re-running from scratch is safe because:
+      - Photos are already on disk (content-addressed storage).
+      - Pipelines are side-effect-free until 'publishing' (Phase 7).
+
+    Args:
+        session_factory: Async session maker for DB access.
+
+    Returns:
+        The number of uploads re-enqueued.
+    """
+    async with session_factory() as session:
+        stmt = select(Upload).where(Upload.status.in_(["queued", "processing"]))
+        result = await session.execute(stmt)
+        rows = list(result.scalars().all())
+
+        for upload in rows:
+            upload.status = "queued"
+            upload.current_stage = "queued"
+            upload.completed_stages = "[]"
+            upload.cell_progress = None
+            upload.total_cells = None
+            upload.error = None
+            upload.finished_at = None
+
+        if rows:
+            await session.commit()
+
+    # After the commit, re-enqueue and dispatch each recovered upload.
+    for upload in rows:
+        await enqueue(upload.id)
+        task: asyncio.Task[None] = asyncio.create_task(
+            run_pipeline_for_upload(upload.id, session_factory)
+        )
+        _recovery_tasks.add(task)
+        task.add_done_callback(_recovery_tasks.discard)
+
+    return len(rows)
