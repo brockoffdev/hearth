@@ -137,15 +137,16 @@ export function Upload(): JSX.Element {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
-  // Revoke blob URL when the component unmounts (cleanup)
+  // Revoke blob URL when the preview URL changes or the component unmounts.
+  // Keying on the URL itself guarantees the closure captures the right value
+  // even if the user transitions idle → preview → unmount.
+  const previewUrl = state.kind === 'preview' ? state.previewUrl : null;
   useEffect(() => {
+    if (previewUrl === null) return;
     return () => {
-      if (state.kind === 'preview') {
-        URL.revokeObjectURL(state.previewUrl);
-      }
+      URL.revokeObjectURL(previewUrl);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [previewUrl]);
 
   // ---------------------------------------------------------------------------
   // Handlers

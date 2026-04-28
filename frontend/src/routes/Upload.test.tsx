@@ -66,11 +66,17 @@ beforeEach(() => {
     vi.fn().mockResolvedValue(makeResponse(401, { detail: 'Unauthorized' })),
   );
 
-  // jsdom doesn't implement URL.createObjectURL; stub it.
-  vi.stubGlobal('URL', {
-    ...URL,
-    createObjectURL: vi.fn(() => 'blob:fake-url'),
-    revokeObjectURL: vi.fn(),
+  // jsdom doesn't implement URL.createObjectURL/revokeObjectURL.
+  // Patch them as configurable properties on the real URL constructor so
+  // they survive vi.unstubAllGlobals() but get re-applied each test, and so
+  // the unmount cleanup in @testing-library/react's afterEach can call them.
+  Object.defineProperty(URL, 'createObjectURL', {
+    value: vi.fn(() => 'blob:fake-url'),
+    configurable: true,
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    value: vi.fn(),
+    configurable: true,
   });
 });
 
