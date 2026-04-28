@@ -1,0 +1,34 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 48px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.title {
+  font-family: var(--fontDisplay);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--fg);
+  margin: 0;
+}
+
+.subtitle {
+  font-family: var(--fontBody);
+  font-size: 14px;
+  color: var(--fgSoft);
+  margin: 0;
+}
