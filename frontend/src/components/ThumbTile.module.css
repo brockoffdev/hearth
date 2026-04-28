@@ -1,0 +1,33 @@
+.tile {
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--paperDeep) 0 8px,
+    color-mix(in oklab, var(--paperDeep) 60%, transparent) 8px 16px
+  );
+  border: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--fontMono);
+  font-size: 10px;
+  color: var(--fgSoft);
+  position: relative;
+  overflow: hidden;
+}
+
+.accent {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+}
