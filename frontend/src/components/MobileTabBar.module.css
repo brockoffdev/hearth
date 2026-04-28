@@ -1,0 +1,35 @@
+.bar {
+  padding: 8px 12px 28px; /* extra bottom padding for iOS safe-area baseline */
+  border-top: 1px solid var(--rule);
+  background: var(--bg);
+  display: flex;
+  justify-content: space-around;
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  color: var(--fgSoft);
+  text-decoration: none;
+  position: relative;
+}
+
+.tab[data-active="true"] {
+  color: var(--accent);
+}
+
+.tab svg {
+  display: block;
+}
+
+.label {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.tab[data-active="true"] .label {
+  font-weight: 700;
+}
