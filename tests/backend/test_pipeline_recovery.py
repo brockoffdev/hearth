@@ -6,14 +6,16 @@ Phase 4 Task H: when the server boots, uploads stranded in 'queued' or
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from backend.app.auth.passwords import hash_password
 from backend.app.db.base import get_session_factory
-from backend.app.db.models import Upload, User
+from backend.app.db.models import Event, Upload, User
 from backend.app.uploads.queue import _reset_for_tests
 from backend.app.uploads.runner import recover_pending_uploads
 
@@ -76,6 +78,46 @@ async def _fetch_upload(db_engine: AsyncEngine, upload_id: int) -> Upload:
         row = await session.get(Upload, upload_id)
         assert row is not None, f"Upload {upload_id} not found"
         return row
+
+
+async def _make_events(
+    db_engine: AsyncEngine,
+    upload_id: int,
+    count: int,
+) -> list[int]:
+    """Insert *count* minimal Event rows for *upload_id*; return their ids."""
+    factory = get_session_factory(db_engine)
+    ids: list[int] = []
+    async with factory() as session:
+        for i in range(count):
+            event = Event(
+                upload_id=upload_id,
+                family_member_id=None,
+                title=f"Event {i}",
+                start_dt=datetime(2026, 4, 27, 9, 0),
+                end_dt=None,
+                all_day=False,
+                confidence=0.9,
+                status="auto_published",
+            )
+            session.add(event)
+        await session.commit()
+        # Refresh IDs
+        result = await session.execute(
+            select(Event).where(Event.upload_id == upload_id)
+        )
+        ids = [row.id for row in result.scalars().all()]
+    return ids
+
+
+async def _count_events_for_upload(db_engine: AsyncEngine, upload_id: int) -> int:
+    """Return the number of Event rows for *upload_id*."""
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(
+            select(Event).where(Event.upload_id == upload_id)
+        )
+        return len(list(result.scalars().all()))
 
 
 # ---------------------------------------------------------------------------
@@ -245,3 +287,63 @@ async def test_recover_pending_uploads_clears_partial_progress(
     assert row.total_cells is None
     assert row.error is None
     assert row.finished_at is None
+
+
+@pytest.mark.asyncio
+async def test_recover_pending_uploads_deletes_partial_event_rows(
+    db_engine: AsyncEngine,
+) -> None:
+    """Recovery deletes Event rows attributed to re-enqueued uploads.
+
+    Scenario:
+      - upload_A is 'processing' with 5 Event rows (partial pipeline run).
+      - upload_B is 'completed' with 2 Event rows (finished run, must NOT be touched).
+    After recover_pending_uploads():
+      - upload_A.status == 'queued'
+      - upload_A's 5 Event rows are gone (count == 0)
+      - upload_B's 2 Event rows are untouched (count == 2)
+    """
+    user_id = await _make_user(db_engine)
+
+    # upload_A: stranded, has 5 partial events
+    upload_a_id = await _make_upload(
+        db_engine,
+        user_id,
+        status="processing",
+        current_stage="cell_progress",
+        completed_stages='["received","preprocessing","grid_detected","model_loading"]',
+        cell_progress=5,
+        total_cells=35,
+    )
+    await _make_events(db_engine, upload_a_id, count=5)
+
+    # upload_B: completed control upload with 2 events — must be unaffected
+    upload_b_id = await _make_upload(
+        db_engine,
+        user_id,
+        status="completed",
+        current_stage="done",
+    )
+    await _make_events(db_engine, upload_b_id, count=2)
+
+    factory = get_session_factory(db_engine)
+
+    with (
+        patch("backend.app.uploads.runner.enqueue", new_callable=AsyncMock),
+        patch("backend.app.uploads.runner.run_pipeline_for_upload", new_callable=AsyncMock),
+    ):
+        count = await recover_pending_uploads(factory)
+
+    assert count == 1  # only upload_A recovered
+
+    # upload_A: status reset, events deleted
+    row_a = await _fetch_upload(db_engine, upload_a_id)
+    assert row_a.status == "queued"
+    events_a_count = await _count_events_for_upload(db_engine, upload_a_id)
+    assert events_a_count == 0, f"Expected 0 events for upload_A, got {events_a_count}"
+
+    # upload_B: untouched
+    row_b = await _fetch_upload(db_engine, upload_b_id)
+    assert row_b.status == "completed"
+    events_b_count = await _count_events_for_upload(db_engine, upload_b_id)
+    assert events_b_count == 2, f"Expected 2 events for upload_B, got {events_b_count}"
