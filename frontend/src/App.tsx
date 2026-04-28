@@ -11,8 +11,10 @@ import { Status } from './routes/Status';
 import { Review } from './routes/Review';
 import { ReviewItem } from './routes/ReviewItem';
 import { Calendar } from './routes/Calendar';
+import { AdminUsers } from './routes/AdminUsers';
 import { RequireAuth } from './auth/RequireAuth';
 import { WizardGate } from './auth/WizardGate';
+// TODO: Phase 8 Task C — add desktop sidebar with Admin sub-nav links
 
 /**
  * Route structure:
@@ -47,6 +49,7 @@ export function App() {
         <Route path="/review" element={<Review />} />
         <Route path="/review/:id" element={<ReviewItem />} />
         <Route path="/calendar" element={<Calendar />} />
+        <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/" element={<Index />} />
         <Route path="*" element={<Index />} />
       </Route>
