@@ -2,6 +2,7 @@ import { Outlet, Routes, Route } from 'react-router-dom';
 import { Index } from './routes/Index';
 import { DesignSmoke } from './routes/DesignSmoke';
 import { Login } from './routes/Login';
+import { Tv } from './routes/Tv';
 import { Setup } from './routes/Setup';
 import { SetupGoogle } from './routes/SetupGoogle';
 import { SetupFamily } from './routes/SetupFamily';
@@ -20,6 +21,7 @@ import { WizardGate } from './auth/WizardGate';
 /**
  * Route structure:
  *   /login       — always accessible (anonymous)
+ *   /tv          — always accessible (anonymous wall display)
  *   /_design     — always accessible (design smoke test)
  *   all others   — RequireAuth (must be logged in) → WizardGate (must complete wizard)
  *
@@ -31,6 +33,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/tv" element={<Tv />} />
       <Route path="/_design" element={<DesignSmoke />} />
       <Route
         element={
