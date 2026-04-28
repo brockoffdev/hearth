@@ -1,4 +1,5 @@
 export type StageKey =
+  | 'queued'
   | 'received'
   | 'preprocessing'
   | 'grid_detected'
