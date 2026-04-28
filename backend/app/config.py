@@ -84,6 +84,20 @@ class Settings(BaseSettings):
     # Override via HEARTH_CONFIDENCE_THRESHOLD.
     confidence_threshold: float = 0.85
 
+    # Gemini API key (BYO). Required when vision_provider='gemini'.
+    # Get one at https://aistudio.google.com/.
+    # Override via HEARTH_GEMINI_API_KEY.
+    # Note: when switching providers, set BOTH vision_provider AND vision_model;
+    # the factory does not auto-swap to provider-specific defaults.
+    gemini_api_key: str = ""
+
+    # Anthropic API key (BYO). Required when vision_provider='anthropic'.
+    # Get one at https://console.anthropic.com/.
+    # Override via HEARTH_ANTHROPIC_API_KEY.
+    # Note: when switching providers, set BOTH vision_provider AND vision_model;
+    # the factory does not auto-swap to provider-specific defaults.
+    anthropic_api_key: str = ""
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
