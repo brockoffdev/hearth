@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { listUploads, getUpload } from './uploads';
+import { listUploads, getUpload, uploadPhoto } from './uploads';
 import type { UploadSummary } from './uploads';
 
 function makeResponse(status: number, body: unknown): Response {
@@ -95,5 +95,57 @@ describe('getUpload', () => {
     );
 
     await expect(getUpload(999)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('uploadPhoto', () => {
+  it('posts FormData with the file to /api/uploads', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(makeResponse(201, MOCK_UPLOAD));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const file = new File(['data'], 'photo.jpg', { type: 'image/jpeg' });
+    const result = await uploadPhoto(file);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/uploads');
+    expect(init.method).toBe('POST');
+    expect(init.credentials).toBe('include');
+    expect(init.body).toBeInstanceOf(FormData);
+    const fd = init.body as FormData;
+    expect(fd.get('photo')).toBeInstanceOf(File);
+    expect(result).toEqual(MOCK_UPLOAD);
+  });
+
+  it('does NOT set Content-Type header (lets browser set multipart boundary)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(makeResponse(201, MOCK_UPLOAD));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const file = new File(['data'], 'photo.jpg', { type: 'image/jpeg' });
+    await uploadPhoto(file);
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    // headers should be absent or not contain Content-Type
+    const headers = init.headers as Record<string, string> | undefined;
+    expect(headers?.['Content-Type']).toBeUndefined();
+  });
+
+  it('throws ApiError with detail on 4xx response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeResponse(413, { detail: 'File too large' }),
+      ),
+    );
+
+    const file = new File(['data'], 'photo.jpg', { type: 'image/jpeg' });
+    await expect(uploadPhoto(file)).rejects.toMatchObject({
+      status: 413,
+      message: 'File too large',
+    });
   });
 });
