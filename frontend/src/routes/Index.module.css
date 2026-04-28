@@ -1,9 +1,9 @@
 /* ── Page shell ─────────────────────────────────────────────────────────── */
 
 .page {
-  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  height: 100vh;
   background: var(--bg);
   color: var(--fg);
 }
@@ -76,6 +76,7 @@
 
 .main {
   flex: 1;
+  overflow-y: auto;
   padding: 28px 22px 40px;
   display: flex;
   flex-direction: column;

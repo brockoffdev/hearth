@@ -8,6 +8,7 @@ import { useNewCaptureSheet } from '../components/NewCaptureSheet';
 import { listUploads } from '../lib/uploads';
 import type { UploadSummary } from '../lib/uploads';
 import { formatRelativeTime } from '../lib/relativeTime';
+import { MobileTabBar } from '../components/MobileTabBar';
 import styles from './Index.module.css';
 
 // ---------------------------------------------------------------------------
@@ -183,6 +184,8 @@ export function Index(): JSX.Element {
           )}
         </section>
       </main>
+
+      <MobileTabBar active="home" />
     </div>
   );
 }
