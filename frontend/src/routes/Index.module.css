@@ -89,7 +89,7 @@
   font-size: 38px;
   line-height: 1.1;
   letter-spacing: -0.03em;
-  color: var(--ink);
+  color: var(--fg);
   margin: 0 0 10px;
 }
 
@@ -140,7 +140,7 @@
 .sectionTitle {
   font-family: var(--fontDisplay);
   font-size: 22px;
-  color: var(--ink);
+  color: var(--fg);
   margin: 0 0 14px;
 }
 
@@ -196,7 +196,7 @@
 .rowTime {
   font-size: 14px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--fg);
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
