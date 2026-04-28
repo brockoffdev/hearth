@@ -58,14 +58,18 @@ function useRotation(pageCount: number, intervalMs: number): [number, () => void
   return [current, pause, resume];
 }
 
+const EXTENDED_STALE_MS = 30 * 60_000;
+
 function useTvSnapshot(): {
   snapshot: TvSnapshot | null;
   lastFetchedAt: number | null;
   isStale: boolean;
+  firstStaleAt: Date | null;
 } {
   const [snapshot, setSnapshot] = useState<TvSnapshot | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
+  const [firstStaleAt, setFirstStaleAt] = useState<Date | null>(null);
 
   const doFetch = useCallback(async () => {
     try {
@@ -88,7 +92,16 @@ function useTvSnapshot(): {
     fetchFailed ||
     (lastFetchedAt !== null && Date.now() - lastFetchedAt > STALE_THRESHOLD_MS);
 
-  return { snapshot, lastFetchedAt, isStale };
+  // Track when staleness first started so we can show an extended-stale banner.
+  useEffect(() => {
+    if (isStale && firstStaleAt === null) {
+      setFirstStaleAt(new Date());
+    } else if (!isStale && firstStaleAt !== null) {
+      setFirstStaleAt(null);
+    }
+  }, [isStale, firstStaleAt]);
+
+  return { snapshot, lastFetchedAt, isStale, firstStaleAt };
 }
 
 // ---------------------------------------------------------------------------
@@ -561,7 +574,7 @@ function ComingUpPage({ snapshot, now }: { snapshot: TvSnapshot; now: Date }): J
 // ---------------------------------------------------------------------------
 
 export function Tv(): JSX.Element {
-  const { snapshot, isStale } = useTvSnapshot();
+  const { snapshot, isStale, firstStaleAt } = useTvSnapshot();
   const [currentPage, pauseRotation, resumeRotation] = useRotation(TV_PAGES.length, PAGE_INTERVAL_MS);
 
   const [clockNow, setClockNow] = useState(() => new Date());
@@ -582,6 +595,13 @@ export function Tv(): JSX.Element {
   }, []);
 
   const weekNumber = isoWeekNumber(clockNow);
+
+  const extendedStale =
+    firstStaleAt !== null &&
+    Date.now() - firstStaleAt.getTime() > EXTENDED_STALE_MS;
+  const staleMins = firstStaleAt !== null
+    ? Math.floor((Date.now() - firstStaleAt.getTime()) / 60_000)
+    : 0;
 
   const renderPage = (pageIndex: number): JSX.Element | null => {
     if (!snapshot) return null;
@@ -615,6 +635,18 @@ export function Tv(): JSX.Element {
         aria-label={isStale ? 'Data stale' : 'Data fresh'}
         role="status"
       />
+
+      {/* Extended-stale banner — only after 30+ min of failed fetches */}
+      {extendedStale && (
+        <div
+          className={styles.staleBanner}
+          data-testid="stale-banner"
+          role="status"
+          aria-live="polite"
+        >
+          ⚠ Calendar hasn&apos;t refreshed in {staleMins} min — server may be down.
+        </div>
+      )}
 
       {/* Loading state before first fetch */}
       {!snapshot && (

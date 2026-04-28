@@ -349,4 +349,16 @@
   .cardGrid {
     grid-template-columns: 1fr;
   }
+
+  /* Ensure stepper buttons meet 44×44 touch target */
+  .stepBtn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Save button full-width for easier tap */
+  .saveBar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
