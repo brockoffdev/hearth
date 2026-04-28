@@ -29,6 +29,12 @@ FROM python:3.12-slim AS runner
 
 WORKDIR /app
 
+# gosu is used by the entrypoint to drop from root to the hearth user
+# after fixing ownership of /data (named-volume init quirk).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy virtual environment from builder
 COPY --from=backend-builder /build/.venv /app/.venv
 
@@ -40,13 +46,20 @@ COPY docs/ ./docs/
 # Copy built frontend from frontend-builder
 COPY --from=frontend-builder /app/dist ./frontend/dist/
 
+# Entrypoint that fixes /data ownership at runtime then drops to hearth.
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
 # Create the data directory for the SQLite volume mount and non-root user.
+# We do NOT set `USER hearth` — the entrypoint starts as root so it can
+# chown /data (named volumes come up root-owned regardless of the image's
+# baked-in ownership), then re-execs as hearth via gosu.
 RUN mkdir -p /data && useradd -r -u 1001 hearth && chown -R hearth:hearth /app /data
-USER hearth
 
 EXPOSE 8080
 
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
