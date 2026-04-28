@@ -1,22 +1,48 @@
 name: CI
 
+# Trigger CI only when code-impacting files change. Documentation-only
+# pushes (README, CHANGELOG, /docs, LICENSE, design hand-off bundles)
+# don't need to spin up a full build. paths-ignore is "skip only when
+# every changed path matches the ignore list" — mixed code+docs pushes
+# still run CI.
 on:
-  push:
-    branches:
-      - "**"
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'design_handoff_*/**'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'design_handoff_*/**'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  # ─── Backend (lint + types + tests) ──────────────────────────
   backend:
-    runs-on: ubuntu-latest
+    name: Backend (ruff + mypy + pytest)
+    runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
+      # uv works on both GHA-hosted and self-hosted runners; the
+      # myoung34/github-runner image is bare Ubuntu so Python isn't
+      # pre-installed — `uv python install` provisions it on demand.
       - name: Install uv
         uses: astral-sh/setup-uv@v8
         with:
@@ -36,66 +62,324 @@ jobs:
         run: uv run mypy backend/
 
       - name: Test (pytest)
-        run: uv run pytest tests/backend/ -v
+        run: uv run pytest tests/backend/
 
+  # ─── Frontend (eslint + tsc + vitest + build) ────────────────
   frontend:
-    runs-on: ubuntu-latest
+    name: Frontend (eslint + tsc + vitest + build)
+    runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - name: Set up Node 24
-        uses: actions/setup-node@v6
+      # setup-node works on both GHA-hosted and self-hosted runners.
+      - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: ./frontend
+        working-directory: frontend
         run: npm ci
 
       - name: Lint (eslint)
-        working-directory: ./frontend
+        working-directory: frontend
         run: npm run lint
 
       - name: Type-check (tsc)
-        working-directory: ./frontend
+        working-directory: frontend
         run: npm run typecheck
 
       - name: Test (vitest)
-        working-directory: ./frontend
-        run: npm run test
+        working-directory: frontend
+        run: npm test -- --run
 
       - name: Build (vite)
-        working-directory: ./frontend
+        working-directory: frontend
         run: npm run build
 
-  docker:
-    runs-on: ubuntu-latest
+  # ─── Docker build + push (main pushes only) ──────────────────
+  # Single-arch (linux/amd64) for now on a self-hosted runner already
+  # connected to Bryant's LAN — no Tailscale needed for this platform.
+  # The matrix is shaped to let arm64 slot in later: a non-self-hosted
+  # arm64 runner would join the matrix with a Tailscale step that fires
+  # only when platform_key != 'amd64'.
+  #
+  # Each platform pushes by digest; the docker-manifest job merges them
+  # into tagged manifest lists. With one arch this is overkill, but it
+  # preserves parity with Engram's flow and makes the arm64 add a one-row
+  # matrix change rather than a workflow rewrite.
+  #
+  # Pushes to docker.brockoff.dev (private registry via Tailscale).
+  # Set repo variable PUSH_TO_GHCR=true to also push to ghcr.io.
+  docker-build:
+    name: Docker Build (${{ matrix.platform }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [backend, frontend]
+    environment: ci  # Required for Tailscale OIDC subject (when arm64 is added)
+    permissions:
+      id-token: write   # Required for Tailscale OIDC
+      contents: read
+      packages: write   # Required for GHCR (when enabled)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            platform_key: amd64
+            runs-on: [self-hosted, linux, x64]
+          # arm64 to be added later. Pattern when added:
+          # - platform: linux/arm64
+          #   platform_key: arm64
+          #   runs-on: ubuntu-24.04-arm    (GHA-hosted; needs Tailscale)
+    runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build image
-        run: docker buildx build -t hearth:ci-${{ github.sha }} --load .
+      # ── Connect to private network via Tailscale ──
+      # Inert today: only fires when the runner is NOT amd64 (i.e. when an
+      # arm64 GHA-hosted runner joins the matrix). The self-hosted amd64
+      # runner is already on Bryant's LAN and reaches docker.brockoff.dev
+      # directly.
+      - name: Connect to Tailscale
+        if: matrix.platform_key != 'amd64'
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:github-ci
+          args: --accept-dns=false
 
-      - name: Smoke test
+      - name: Verify registry connectivity
         run: |
-          docker run --rm -d -p 8080:8080 --name hearth-ci hearth:ci-${{ github.sha }}
-          for i in $(seq 1 10); do
-            curl -fs http://localhost:8080/api/health && break || sleep 1
+          if [ "${{ matrix.platform_key }}" != "amd64" ]; then
+            tailscale status || true
+          fi
+          curl -sf --max-time 10 https://docker.brockoff.dev/v2/ && echo "Registry reachable" || echo "::warning::Registry not reachable (may need DNS or route)"
+
+      # ── Login to private registry ──
+      - name: Login to docker.brockoff.dev
+        uses: docker/login-action@v3
+        with:
+          registry: docker.brockoff.dev
+          username: ${{ secrets.DOCKER_REGISTRY_USERNAME }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+
+      # ── Optionally login to GHCR (controlled by repo variable) ──
+      - name: Login to GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Build and push by digest ──
+      # Each arch produces a manifest keyed by digest (not a tag). The
+      # docker-manifest job assembles them into tagged manifest lists once
+      # all matrix legs succeed.
+      - name: Build and push by digest — private registry
+        id: build-private
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=docker.brockoff.dev/hearth,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.platform_key }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform_key }}
+
+      - name: Build and push by digest — GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        id: build-ghcr
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.platform_key }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform_key }}
+
+      # ── Smoke test the freshly built image ──
+      # docker.brockoff.dev only stores the digest; pull it back, boot the
+      # container, and curl /api/health. HEARTH_SESSION_SECRET must be set
+      # at runtime — generate a throwaway one for the smoke test only.
+      - name: Smoke test image
+        run: |
+          set -e
+          DIGEST="${{ steps.build-private.outputs.digest }}"
+          IMAGE="docker.brockoff.dev/hearth@${DIGEST}"
+          docker pull "$IMAGE"
+          SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+          docker run --rm -d --name hearth-ci -p 18080:8080 \
+            -e HEARTH_SESSION_SECRET="$SECRET" \
+            -e HEARTH_DEBUG=false \
+            "$IMAGE"
+          # Health endpoint is anonymous; ready as soon as migrations + lifespan finish.
+          READY=0
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:18080/api/health > /dev/null 2>&1; then
+              READY=1
+              break
+            fi
+            sleep 1
           done
-          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health)
-          if [ "$status" != "200" ]; then
-            echo "ERROR: /api/health did not return 200 (got: $status)"
+          if [ "$READY" != "1" ]; then
+            echo "::error::Container did not become ready within 30s"
             docker logs hearth-ci || true
+            docker stop hearth-ci || true
             exit 1
           fi
+          curl -sf http://127.0.0.1:18080/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True"
           docker stop hearth-ci
 
-      - name: Stop container
-        if: always()
-        run: docker stop hearth-ci 2>/dev/null || true
+      # ── Export digests for the merge job ──
+      - name: Export digest — private
+        run: |
+          mkdir -p /tmp/digests-private
+          digest="${{ steps.build-private.outputs.digest }}"
+          touch "/tmp/digests-private/${digest#sha256:}"
+
+      - name: Export digest — GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        run: |
+          mkdir -p /tmp/digests-ghcr
+          digest="${{ steps.build-ghcr.outputs.digest }}"
+          touch "/tmp/digests-ghcr/${digest#sha256:}"
+
+      - name: Upload digest — private
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-private-${{ matrix.platform_key }}
+          path: /tmp/digests-private/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload digest — GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-ghcr-${{ matrix.platform_key }}
+          path: /tmp/digests-ghcr/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ─── Merge per-arch digests into tagged manifest lists ───────
+  # Single-arch today (just amd64), but the manifest list still attaches
+  # the human-friendly tags (sha + latest). When arm64 lands the same job
+  # transparently merges both legs.
+  docker-manifest:
+    name: Docker Manifest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [docker-build]
+    runs-on: [self-hosted, linux, x64]
+    environment: ci
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # No Tailscale here — this job runs on the self-hosted runner which
+      # is already on Bryant's LAN with direct access to docker.brockoff.dev.
+
+      - name: Login to docker.brockoff.dev
+        uses: docker/login-action@v3
+        with:
+          registry: docker.brockoff.dev
+          username: ${{ secrets.DOCKER_REGISTRY_USERNAME }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+
+      - name: Login to GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Download per-arch digests ──
+      - name: Download digests — private
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests-private
+          pattern: digests-private-*
+          merge-multiple: true
+
+      - name: Download digests — GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests-ghcr
+          pattern: digests-ghcr-*
+          merge-multiple: true
+
+      # ── Re-derive tags (same inputs as docker-build jobs) ──
+      - name: Extract metadata (private registry)
+        id: meta-private
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.brockoff.dev/hearth
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Extract metadata (GHCR)
+        if: vars.PUSH_TO_GHCR == 'true'
+        id: meta-ghcr
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      # ── Create manifest lists ──
+      - name: Create manifest list — private
+        working-directory: /tmp/digests-private
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'docker.brockoff.dev/hearth@sha256:%s ' *)
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-private.outputs.json }}
+
+      - name: Inspect manifest — private
+        run: |
+          docker buildx imagetools inspect docker.brockoff.dev/hearth:latest | sed -n '1,30p'
+
+      - name: Create manifest list — GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        working-directory: /tmp/digests-ghcr
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'ghcr.io/${{ github.repository }}@sha256:%s ' *)
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-ghcr.outputs.json }}
+
+      - name: Inspect manifest — GHCR
+        if: vars.PUSH_TO_GHCR == 'true'
+        run: |
+          docker buildx imagetools inspect ghcr.io/${{ github.repository }}:latest | sed -n '1,30p'
+
+      # ── Report ──
+      - name: Summary
+        run: |
+          echo "## Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Built for **linux/amd64** on a self-hosted runner. (arm64 to be added later.)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Private registry:** docker.brockoff.dev/hearth" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tags:** ${{ steps.meta-private.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ vars.PUSH_TO_GHCR }}" = "true" ]; then
+            echo "- **GHCR:** ghcr.io/${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **GHCR:** disabled (set repo variable PUSH_TO_GHCR=true to enable)" >> $GITHUB_STEP_SUMMARY
+          fi
