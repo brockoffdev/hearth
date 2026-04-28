@@ -1,0 +1,31 @@
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 22px 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label {
+  font-family: var(--fontDisplay);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.count {
+  font-size: 11px;
+  color: var(--fgSoft);
+  font-family: var(--fontMono);
+}
+
+.line {
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
