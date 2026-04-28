@@ -25,8 +25,15 @@ from datetime import time as dt_time
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.app.config import get_settings
+from backend.app.config import Settings, get_settings
 from backend.app.db.models import Event, FamilyMember, PipelineStageDuration, Upload
+from backend.app.google.publish import (
+    GcalError,
+    InvalidGrantError,
+    NoCalendarError,
+    NoOauthError,
+    publish_event,
+)
 from backend.app.uploads.few_shot import fetch_recent_corrections
 from backend.app.uploads.pipeline import (
     ExtractedEventRecord,
@@ -69,6 +76,93 @@ def _parse_event_datetime(iso_date: str, time_text: str | None) -> datetime:
     # Fall back to midnight if no format matched.
     logger.warning("runner: could not parse time_text=%r; using midnight", time_text)
     return datetime.combine(base, dt_time(0, 0))
+
+
+async def _demote_to_pending_review(
+    db: AsyncSession,
+    event_id: int,
+    reason: str,
+) -> None:
+    """Update event to pending_review and append a failure note."""
+    result = await db.execute(select(Event).where(Event.id == event_id))
+    event = result.scalar_one_or_none()
+    if event is None:
+        return
+    event.status = "pending_review"
+    existing = event.notes or ""
+    event.notes = existing + f"\n\n[Auto-publish failed: {reason}]"
+    await db.commit()
+
+
+async def persist_and_maybe_publish(
+    record: ExtractedEventRecord,
+    *,
+    upload_id: int,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    publish_state: dict[str, bool],
+) -> None:
+    """Persist one extracted event and, when eligible, push it to GCal.
+
+    publish_state is a mutable dict with key "oauth_broken" (bool).  When a
+    previous call in the same pipeline run hit an InvalidGrantError the flag is
+    set to True; subsequent auto-publish attempts are skipped so we don't flood
+    the Google API with doomed refresh calls.
+    """
+    start_dt = _parse_event_datetime(record.cell_date_iso, record.time_text)
+    status = (
+        "auto_published"
+        if record.composite_confidence >= settings.confidence_threshold
+        else "pending_review"
+    )
+    event = Event(
+        upload_id=upload_id,
+        family_member_id=record.family_member_id,
+        title=record.title,
+        start_dt=start_dt,
+        end_dt=None,
+        all_day=record.time_text is None,
+        location=None,
+        notes=None,
+        confidence=record.composite_confidence,
+        status=status,
+        google_event_id=None,
+        cell_crop_path=record.cell_crop_path,
+        raw_vlm_json=record.raw_vlm_json,
+    )
+    async with session_factory() as db:
+        db.add(event)
+        await db.commit()
+        await db.refresh(event)
+        event_id = event.id
+
+    if (
+        settings.auto_publish_to_gcal
+        and status == "auto_published"
+        and record.family_member_id is not None
+    ):
+        if publish_state["oauth_broken"]:
+            async with session_factory() as db:
+                await _demote_to_pending_review(db, event_id, "OAuth token invalid")
+        else:
+            async with session_factory() as db:
+                try:
+                    await publish_event(db, event_id, settings=settings)
+                except InvalidGrantError as exc:
+                    logger.warning(
+                        "auto-publish: invalid grant; remaining events will skip publish: %s",
+                        exc,
+                    )
+                    publish_state["oauth_broken"] = True
+                    # publish_event already marks the global broken flag via
+                    # health_state.mark_oauth_broken on RefreshError.
+                    await _demote_to_pending_review(db, event_id, "OAuth token invalid")
+                except (NoOauthError, NoCalendarError, GcalError) as exc:
+                    logger.warning("auto-publish: %s for event=%d", exc, event_id)
+                    await _demote_to_pending_review(db, event_id, str(exc))
+                except Exception:
+                    logger.exception("auto-publish: unexpected failure for event=%d", event_id)
+                    await _demote_to_pending_review(db, event_id, "unexpected error")
 
 
 async def _run_chosen_pipeline(
@@ -136,32 +230,16 @@ async def _run_chosen_pipeline(
                 "runner: no EXIF DateTimeOriginal; using upload date %s", photographed_date
             )
 
+        publish_state: dict[str, bool] = {"oauth_broken": False}
+
         async def on_event_extracted(record: ExtractedEventRecord) -> None:
-            """Persist one extracted event to the DB."""
-            start_dt = _parse_event_datetime(record.cell_date_iso, record.time_text)
-            status = (
-                "auto_published"
-                if record.composite_confidence >= settings.confidence_threshold
-                else "pending_review"
-            )
-            event = Event(
+            await persist_and_maybe_publish(
+                record,
                 upload_id=upload_id,
-                family_member_id=record.family_member_id,
-                title=record.title,
-                start_dt=start_dt,
-                end_dt=None,
-                all_day=record.time_text is None,
-                location=None,
-                notes=None,
-                confidence=record.composite_confidence,
-                status=status,
-                google_event_id=None,
-                cell_crop_path=record.cell_crop_path,
-                raw_vlm_json=record.raw_vlm_json,
+                session_factory=session_factory,
+                settings=settings,
+                publish_state=publish_state,
             )
-            async with session_factory() as db:
-                db.add(event)
-                await db.commit()
 
         async for stage_event in run_pipeline(
             upload_id,

@@ -22,7 +22,11 @@ from backend.app.db.base import get_session_factory
 from backend.app.db.models import Event, EventCorrection, PipelineStageDuration, Upload, User
 from backend.app.uploads.pipeline import HEARTH_STAGES_ORDER
 from backend.app.uploads.queue import _reset_for_tests, dequeue, enqueue, queue_position
-from backend.app.uploads.runner import _parse_event_datetime, run_pipeline_for_upload
+from backend.app.uploads.runner import (
+    _parse_event_datetime,
+    persist_and_maybe_publish,
+    run_pipeline_for_upload,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -520,3 +524,314 @@ async def test_runner_passes_empty_tuple_when_table_is_empty(
         del os.environ["HEARTH_USE_REAL_PIPELINE"]
         del os.environ["HEARTH_FEW_SHOT_CORRECTION_WINDOW"]
         get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# persist_and_maybe_publish tests
+# ---------------------------------------------------------------------------
+
+
+def _make_record(
+    *,
+    composite_confidence: float = 0.95,
+    family_member_id: int | None = 1,
+    title: str = "Soccer practice",
+    cell_date_iso: str = "2026-05-10",
+    time_text: str | None = "3:00 PM",
+) -> object:
+    """Build a minimal ExtractedEventRecord for testing."""
+    from backend.app.uploads.pipeline import ExtractedEventRecord
+
+    return ExtractedEventRecord(
+        cell_row=0,
+        cell_col=0,
+        cell_date_iso=cell_date_iso,
+        title=title,
+        time_text=time_text,
+        color_hex=None,
+        family_member_id=family_member_id,
+        color_match_confidence=composite_confidence,
+        vision_confidence=composite_confidence,
+        composite_confidence=composite_confidence,
+        raw_vlm_json="{}",
+        cell_crop_path=None,
+    )
+
+
+def _make_settings(
+    *, auto_publish_to_gcal: bool = True, confidence_threshold: float = 0.85
+) -> object:
+    """Build a minimal Settings-like object for testing persist_and_maybe_publish."""
+    from unittest.mock import MagicMock
+
+    s = MagicMock()
+    s.auto_publish_to_gcal = auto_publish_to_gcal
+    s.confidence_threshold = confidence_threshold
+    return s
+
+
+async def test_on_event_extracted_auto_publishes_when_above_threshold(
+    db_engine: AsyncEngine,
+) -> None:
+    """High-confidence event with family_member_id → publish_event called once."""
+    from unittest.mock import AsyncMock, patch
+
+    factory = get_session_factory(db_engine)
+    user_id = await _make_user(db_engine)
+    upload_id = await _make_upload(db_engine, user_id)
+    record = _make_record(composite_confidence=0.95, family_member_id=1)
+    settings = _make_settings(auto_publish_to_gcal=True)
+    publish_state: dict[str, bool] = {"oauth_broken": False}
+
+    with patch(
+        "backend.app.uploads.runner.publish_event",
+        new_callable=AsyncMock,
+    ) as mock_publish:
+        await persist_and_maybe_publish(
+            record,
+            upload_id=upload_id,
+            session_factory=factory,
+            settings=settings,
+            publish_state=publish_state,
+        )
+
+    mock_publish.assert_awaited_once()
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.upload_id == upload_id))
+        events = list(result.scalars().all())
+    assert len(events) == 1
+    assert events[0].status == "auto_published"
+
+
+async def test_on_event_extracted_does_not_publish_pending_review(
+    db_engine: AsyncEngine,
+) -> None:
+    """Low-confidence event → status=pending_review and publish_event NOT called."""
+    from unittest.mock import AsyncMock, patch
+
+    factory = get_session_factory(db_engine)
+    user_id = await _make_user(db_engine)
+    upload_id = await _make_upload(db_engine, user_id)
+    record = _make_record(composite_confidence=0.50, family_member_id=1)
+    settings = _make_settings(auto_publish_to_gcal=True)
+    publish_state: dict[str, bool] = {"oauth_broken": False}
+
+    with patch(
+        "backend.app.uploads.runner.publish_event",
+        new_callable=AsyncMock,
+    ) as mock_publish:
+        await persist_and_maybe_publish(
+            record,
+            upload_id=upload_id,
+            session_factory=factory,
+            settings=settings,
+            publish_state=publish_state,
+        )
+
+    mock_publish.assert_not_called()
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.upload_id == upload_id))
+        events = list(result.scalars().all())
+    assert len(events) == 1
+    assert events[0].status == "pending_review"
+
+
+async def test_on_event_extracted_skips_publish_when_setting_disabled(
+    db_engine: AsyncEngine,
+) -> None:
+    """auto_publish_to_gcal=False → row written as auto_published but publish not called."""
+    from unittest.mock import AsyncMock, patch
+
+    factory = get_session_factory(db_engine)
+    user_id = await _make_user(db_engine)
+    upload_id = await _make_upload(db_engine, user_id)
+    record = _make_record(composite_confidence=0.95, family_member_id=1)
+    settings = _make_settings(auto_publish_to_gcal=False)
+    publish_state: dict[str, bool] = {"oauth_broken": False}
+
+    with patch(
+        "backend.app.uploads.runner.publish_event",
+        new_callable=AsyncMock,
+    ) as mock_publish:
+        await persist_and_maybe_publish(
+            record,
+            upload_id=upload_id,
+            session_factory=factory,
+            settings=settings,
+            publish_state=publish_state,
+        )
+
+    mock_publish.assert_not_called()
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.upload_id == upload_id))
+        events = list(result.scalars().all())
+    assert len(events) == 1
+    # The row is still written as auto_published — pipeline's measurement is unchanged.
+    assert events[0].status == "auto_published"
+
+
+async def test_on_event_extracted_skips_publish_when_no_family_member(
+    db_engine: AsyncEngine,
+) -> None:
+    """family_member_id=None → no publish attempt, row written as auto_published."""
+    from unittest.mock import AsyncMock, patch
+
+    factory = get_session_factory(db_engine)
+    user_id = await _make_user(db_engine)
+    upload_id = await _make_upload(db_engine, user_id)
+    record = _make_record(composite_confidence=0.95, family_member_id=None)
+    settings = _make_settings(auto_publish_to_gcal=True)
+    publish_state: dict[str, bool] = {"oauth_broken": False}
+
+    with patch(
+        "backend.app.uploads.runner.publish_event",
+        new_callable=AsyncMock,
+    ) as mock_publish:
+        await persist_and_maybe_publish(
+            record,
+            upload_id=upload_id,
+            session_factory=factory,
+            settings=settings,
+            publish_state=publish_state,
+        )
+
+    mock_publish.assert_not_called()
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.upload_id == upload_id))
+        events = list(result.scalars().all())
+    assert len(events) == 1
+    assert events[0].status == "auto_published"
+
+
+async def test_on_event_extracted_demotes_to_pending_review_on_gcal_error(
+    db_engine: AsyncEngine,
+) -> None:
+    """publish_event raises GcalError → event demoted to pending_review with notes."""
+    from unittest.mock import AsyncMock, patch
+
+    from backend.app.google.publish import GcalError
+
+    factory = get_session_factory(db_engine)
+    user_id = await _make_user(db_engine)
+    upload_id = await _make_upload(db_engine, user_id)
+    record = _make_record(composite_confidence=0.95, family_member_id=1)
+    settings = _make_settings(auto_publish_to_gcal=True)
+    publish_state: dict[str, bool] = {"oauth_broken": False}
+
+    with patch(
+        "backend.app.uploads.runner.publish_event",
+        new_callable=AsyncMock,
+        side_effect=GcalError("quota exceeded", status_code=429),
+    ):
+        await persist_and_maybe_publish(
+            record,
+            upload_id=upload_id,
+            session_factory=factory,
+            settings=settings,
+            publish_state=publish_state,
+        )
+
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.upload_id == upload_id))
+        events = list(result.scalars().all())
+    assert len(events) == 1
+    assert events[0].status == "pending_review"
+    assert "[Auto-publish failed:" in (events[0].notes or "")
+
+
+async def test_on_event_extracted_short_circuits_after_invalid_grant(
+    db_engine: AsyncEngine,
+) -> None:
+    """First call raises InvalidGrantError → second call skips publish entirely."""
+    from unittest.mock import AsyncMock, patch
+
+    from backend.app.google.publish import InvalidGrantError
+
+    factory = get_session_factory(db_engine)
+    user_id = await _make_user(db_engine)
+    upload_id = await _make_upload(db_engine, user_id)
+    settings = _make_settings(auto_publish_to_gcal=True)
+    publish_state: dict[str, bool] = {"oauth_broken": False}
+
+    record1 = _make_record(composite_confidence=0.95, family_member_id=1, title="Event A")
+    record2 = _make_record(composite_confidence=0.95, family_member_id=1, title="Event B")
+
+    call_count = 0
+
+    async def _raise_on_first(*args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise InvalidGrantError("token revoked")
+
+    with patch(
+        "backend.app.uploads.runner.publish_event",
+        new_callable=AsyncMock,
+        side_effect=_raise_on_first,
+    ) as mock_publish:
+        await persist_and_maybe_publish(
+            record1,
+            upload_id=upload_id,
+            session_factory=factory,
+            settings=settings,
+            publish_state=publish_state,
+        )
+        await persist_and_maybe_publish(
+            record2,
+            upload_id=upload_id,
+            session_factory=factory,
+            settings=settings,
+            publish_state=publish_state,
+        )
+
+    # publish_event should have been called exactly once (for the first event).
+    assert mock_publish.await_count == 1
+    assert publish_state["oauth_broken"] is True
+
+    async with factory() as session:
+        result = await session.execute(
+            select(Event).where(Event.upload_id == upload_id).order_by(Event.id)
+        )
+        events = list(result.scalars().all())
+
+    assert len(events) == 2
+    # Both events should be pending_review.
+    assert events[0].status == "pending_review"
+    assert events[1].status == "pending_review"
+
+
+async def test_on_event_extracted_preserves_existing_notes_on_demote(
+    db_engine: AsyncEngine,
+) -> None:
+    """Demotion appends the failure note without overwriting existing notes."""
+    from backend.app.uploads.runner import _demote_to_pending_review
+
+    factory = get_session_factory(db_engine)
+    user_id = await _make_user(db_engine)
+    upload_id = await _make_upload(db_engine, user_id)
+
+    async with factory() as session:
+        event = Event(
+            upload_id=upload_id,
+            title="Pre-existing",
+            start_dt=datetime(2026, 5, 10, 15, 0),
+            status="auto_published",
+            confidence=0.95,
+            family_member_id=1,
+            notes="Original note",
+        )
+        session.add(event)
+        await session.commit()
+        await session.refresh(event)
+        event_id = event.id
+
+    async with factory() as session:
+        await _demote_to_pending_review(session, event_id, "OAuth not connected")
+
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event_id))
+        updated = result.scalar_one()
+
+    assert updated.status == "pending_review"
+    assert "Original note" in (updated.notes or "")
+    assert "[Auto-publish failed: OAuth not connected]" in (updated.notes or "")

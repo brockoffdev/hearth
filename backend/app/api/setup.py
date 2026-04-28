@@ -14,6 +14,7 @@ from backend.app.api.auth import UserResponse, to_user_response
 from backend.app.auth.dependencies import require_admin
 from backend.app.db.base import get_db
 from backend.app.db.models import FamilyMember, OauthToken, User
+from backend.app.google.health_state import clear_oauth_broken
 
 router = APIRouter()
 
@@ -56,4 +57,8 @@ async def complete_google_setup(
     db.add(current_admin)
     await db.commit()
     await db.refresh(current_admin)
+
+    # A completed setup means credentials are good; remove any stale broken flag.
+    await clear_oauth_broken(db)
+
     return to_user_response(current_admin)

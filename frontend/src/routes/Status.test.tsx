@@ -38,6 +38,17 @@ vi.mock('../lib/useUploads', () => ({
   }),
 }));
 
+// Mock useGoogleHealth so it doesn't fire a real fetch in unit tests.
+vi.mock('../lib/useGoogleHealth', () => ({
+  useGoogleHealth: () => ({
+    connected: true,
+    broken_reason: null,
+    broken_at: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------

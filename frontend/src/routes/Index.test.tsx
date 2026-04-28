@@ -17,6 +17,17 @@ vi.mock('../lib/useUploads', () => ({
   useUploads: vi.fn(),
 }));
 
+// Mock useGoogleHealth so it doesn't fire a real fetch in unit tests.
+vi.mock('../lib/useGoogleHealth', () => ({
+  useGoogleHealth: () => ({
+    connected: true,
+    broken_reason: null,
+    broken_at: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 const mocked = vi.mocked(useUploads);
 
 function makeUploadsResult(overrides: Partial<ReturnType<typeof useUploads>> = {}): ReturnType<typeof useUploads> {

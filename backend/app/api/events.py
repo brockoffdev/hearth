@@ -1,15 +1,16 @@
-"""Events API endpoints — Phase 6 Task A.
+"""Events API endpoints — Phase 6 Task A / Phase 7 Task C.
 
 Routes:
   GET    /api/events              — list events (filterable by status, upload_id)
   GET    /api/events/{id}         — single event detail
-  PATCH  /api/events/{id}         — update fields + publish
-  DELETE /api/events/{id}         — soft-delete (status → rejected)
+  PATCH  /api/events/{id}         — update fields + publish (syncs to GCal)
+  DELETE /api/events/{id}         — soft-delete (status → rejected, best-effort GCal removal)
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -23,7 +24,17 @@ from backend.app.auth.dependencies import require_user
 from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import Event, EventCorrection, FamilyMember, Upload, User
+from backend.app.google.publish import (
+    GcalError,
+    InvalidGrantError,
+    NoCalendarError,
+    NoOauthError,
+    publish_event,
+    unpublish_event,
+)
 from backend.app.uploads.storage import read_photo
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -255,12 +266,17 @@ async def patch_event(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ) -> dict[str, object]:
-    """Update event fields and mark as published.
+    """Update event fields, mark as published, and sync to Google Calendar.
 
     If any fields changed: writes an EventCorrection row capturing the before/after.
     If no fields changed (confirm-as-is path): still publishes without a correction row.
 
-    Does NOT touch google_event_id or published_at — Phase 7 handles GCal sync.
+    GCal sync is synchronous — the request blocks until the GCal call completes.
+    On GCal failure the local status reverts to pending_review so the user can
+    retry, but any field edits are preserved (the EventCorrection row stays).
+
+    Exception: if the event was already published (google_event_id was set before
+    this PATCH), status is NOT reverted on failure — it was already 'published'.
     """
     event = await _fetch_event_or_404(event_id, db)
     await _check_event_access(event, current_user, db)
@@ -270,6 +286,8 @@ async def patch_event(
             status_code=400,
             detail=f"Cannot update an event with status '{event.status}'",
         )
+
+    was_already_published = event.google_event_id is not None
 
     updates = body.model_dump(exclude_unset=True)
     before_snapshot = _snapshot_mutable_fields(event)
@@ -296,6 +314,51 @@ async def patch_event(
     event.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     await db.commit()
+
+    try:
+        await publish_event(db, event.id)
+    except NoOauthError as exc:
+        if not was_already_published:
+            event.status = "pending_review"
+            await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Google Calendar not connected. Admin must complete /setup/google.",
+        ) from exc
+    except InvalidGrantError as exc:
+        if not was_already_published:
+            event.status = "pending_review"
+            await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Google Calendar token expired. Admin must reconnect.",
+        ) from exc
+    except NoCalendarError as exc:
+        if not was_already_published:
+            event.status = "pending_review"
+            await db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Family member has no Google Calendar mapping.",
+        ) from exc
+    except GcalError as exc:
+        if not was_already_published:
+            event.status = "pending_review"
+            await db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail=f"Google Calendar error: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error publishing event %d to Google Calendar", event_id)
+        if not was_already_published:
+            event.status = "pending_review"
+            await db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Unexpected error publishing to Google Calendar",
+        ) from exc
+
     await db.refresh(event)
 
     member: FamilyMember | None = None
@@ -316,8 +379,9 @@ async def delete_event(
 ) -> None:
     """Soft-delete an event by setting status to 'rejected'.
 
-    Does NOT call Google Calendar — Phase 7 will add GCal deletion for
-    events that have a google_event_id set.
+    If the event has a google_event_id, attempts to remove it from Google Calendar
+    first.  GCal cleanup is best-effort: any failure is logged and the soft-reject
+    proceeds regardless.  The caller always gets 204.
 
     Returns 204 No Content.
     """
@@ -326,6 +390,27 @@ async def delete_event(
 
     if event.status == "rejected":
         raise HTTPException(status_code=400, detail="Event is already rejected")
+
+    if event.google_event_id is not None:
+        try:
+            await unpublish_event(db, event.id)
+        except (NoOauthError, InvalidGrantError) as exc:
+            logger.warning(
+                "Could not remove GCal event for event %d during rejection (OAuth issue): %s",
+                event_id,
+                exc,
+            )
+        except GcalError as exc:
+            logger.warning(
+                "Could not remove GCal event for event %d during rejection (GCal error): %s",
+                event_id,
+                exc,
+            )
+        except Exception:
+            logger.exception(
+                "Unexpected error removing GCal event for event %d during rejection",
+                event_id,
+            )
 
     event.status = "rejected"
     event.updated_at = datetime.now(UTC).replace(tzinfo=None)
