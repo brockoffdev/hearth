@@ -165,6 +165,29 @@ describe('DesignSmoke — Phase 3.5 primitives section', () => {
   });
 });
 
+describe('DesignSmoke — MobileTabBar section', () => {
+  it('renders the MobileTabBar section', () => {
+    const { container } = renderSmoke();
+    const section = container.querySelector('[data-testid="mobile-tab-bar-section"]');
+    expect(section).not.toBeNull();
+  });
+
+  it('renders 4 nav elements (one per active state)', () => {
+    const { container } = renderSmoke();
+    const navs = container.querySelectorAll('nav[aria-label="Primary"]');
+    expect(navs.length).toBe(4);
+  });
+
+  it('each active state has exactly one data-active="true" link', () => {
+    const { container } = renderSmoke();
+    const navs = container.querySelectorAll('nav[aria-label="Primary"]');
+    navs.forEach((nav) => {
+      const activeLinks = nav.querySelectorAll('a[data-active="true"]');
+      expect(activeLinks.length).toBe(1);
+    });
+  });
+});
+
 describe('DesignSmoke — NewCaptureSheet trigger', () => {
   it('renders the "Trigger New Capture sheet" button in the NewCaptureSheet section', () => {
     const { container } = renderSmoke();

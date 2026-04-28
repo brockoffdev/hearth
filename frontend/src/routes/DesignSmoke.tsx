@@ -20,6 +20,8 @@ import { Chevron } from '../components/Chevron';
 import { BackChevron } from '../components/BackChevron';
 import { formatETA, formatDuration } from '../lib/eta';
 import { useNewCaptureSheet } from '../components/NewCaptureSheet';
+import { MobileTabBar } from '../components/MobileTabBar';
+import type { TabId } from '../components/MobileTabBar';
 import styles from './DesignSmoke.module.css';
 
 const FAMILY_MEMBERS: FamilyMemberId[] = ['bryant', 'danielle', 'isabella', 'eliana', 'family'];
@@ -298,6 +300,22 @@ export function DesignSmoke() {
           <span className={styles.swatchLabel}>
             {captureSheet.isOpen ? 'open' : 'closed'}
           </span>
+        </div>
+      </section>
+
+      {/* MobileTabBar section */}
+      <section className={styles.section} data-testid="mobile-tab-bar-section">
+        <h2 className={styles.sectionTitle}>MobileTabBar</h2>
+        <p className={styles.subtitle}>All 4 active states:</p>
+        <div className={styles.tabBarGrid}>
+          {(['home', 'uploads', 'review', 'calendar'] as TabId[]).map((active) => (
+            <div key={active} className={styles.tabBarPreview}>
+              <span className={styles.swatchLabel}>{active} active</span>
+              <div className={styles.tabBarShell}>
+                <MobileTabBar active={active} />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
