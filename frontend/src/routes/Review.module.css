@@ -1,0 +1,130 @@
+/* Review route — pending-review event queue */
+/* Token-only. All colours via CSS custom properties. */
+
+/* ─── Page layout ─────────────────────────────────────────────── */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--fontBody);
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 80px; /* clear tab bar */
+}
+
+/* ─── Title block ────────────────────────────────────────────── */
+
+.titleBlock {
+  padding: 54px 22px 14px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.title {
+  font-family: var(--fontDisplay);
+  font-size: 32px;
+  color: var(--fg);
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.count {
+  font-size: 13px;
+  color: var(--fgSoft);
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--fgSoft);
+  margin: 4px 0 0;
+}
+
+/* ─── Event card list ────────────────────────────────────────── */
+
+.cardList {
+  padding: 0 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ─── Loading / error / empty states ────────────────────────── */
+
+.centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.emptyCard {
+  padding: 32px 24px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  margin: 0 18px;
+}
+
+.emptyHint {
+  font-size: 15px;
+  color: var(--fgSoft);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.emptyLink {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.emptyLink:hover {
+  text-decoration: underline;
+}
+
+.errorBanner {
+  margin: 16px 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--danger) 10%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--danger) 25%, var(--rule));
+  font-size: 13px;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.retryBtn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  background: none;
+  border: 1px solid color-mix(in oklab, var(--danger) 40%, var(--rule));
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

@@ -1,0 +1,245 @@
+/* ReviewItem — single event review/edit screen */
+
+/* ─── Page layout ─────────────────────────────────────────────── */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--fontBody);
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 160px; /* clear sticky bottom bar */
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+
+.header {
+  padding: 54px 22px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.positionLabel {
+  font-size: 13px;
+  color: var(--fgSoft);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ─── Title block ────────────────────────────────────────────── */
+
+.titleBlock {
+  padding: 12px 22px 18px;
+}
+
+.pageTitle {
+  font-family: var(--fontDisplay);
+  font-size: 22px;
+  color: var(--fg);
+  margin: 0;
+}
+
+/* ─── Cell crop card ─────────────────────────────────────────── */
+
+.cellCard {
+  margin: 0 22px 16px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  padding: 18px;
+  position: relative;
+}
+
+.cellLabel {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 11px;
+  color: var(--fgSoft);
+  font-family: var(--fontMono);
+}
+
+.cellImage {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+/* ─── Form fields ────────────────────────────────────────────── */
+
+.fields {
+  padding: 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldFlex {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+}
+
+.fieldInput {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  color: var(--fg);
+  font-size: 15px;
+  font-family: var(--fontBody);
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.fieldInput:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.dateTimeRow {
+  display: flex;
+  gap: 10px;
+}
+
+.allDayRow {
+  padding: 2px 0;
+}
+
+.allDayLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--fgSoft);
+  cursor: pointer;
+}
+
+/* ─── VLM debug ──────────────────────────────────────────────── */
+
+.vlmDebug {
+  margin: 20px 22px 0;
+  border-radius: 12px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.vlmSummary {
+  font-size: 12px;
+  color: var(--fgSoft);
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.vlmPre {
+  font-family: var(--fontMono);
+  font-size: 11px;
+  color: var(--fgSoft);
+  padding: 0 12px 12px;
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ─── Sticky bottom bar ──────────────────────────────────────── */
+
+.stickyBottom {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 22px 32px;
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.saveBtn {
+  width: 100%;
+}
+
+.bottomRow {
+  display: flex;
+  gap: 8px;
+}
+
+.halfBtn {
+  flex: 1;
+}
+
+/* ─── Loading / error states ─────────────────────────────────── */
+
+.centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  min-height: 60dvh;
+}
+
+.errorMsg {
+  font-size: 16px;
+  color: var(--fg);
+  margin: 0;
+}
+
+.backLink {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}

@@ -1,0 +1,84 @@
+.card {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.card.clickable {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.card.clickable:active {
+  opacity: 0.75;
+}
+
+/* ── Cell crop thumbnail ─────────────────────────────────────────────────── */
+
+.cropThumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 1px solid var(--rule);
+}
+
+.cropPlaceholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  border: 1px solid var(--rule);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--surface) 0 6px,
+    color-mix(in oklab, var(--rule) 40%, transparent) 6px 12px
+  );
+}
+
+/* ── Right content ───────────────────────────────────────────────────────── */
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.memberName {
+  font-size: 12px;
+  color: var(--fgSoft);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+.dateSubtitle {
+  font-size: 12px;
+  color: var(--fgSoft);
+  margin: 0;
+}

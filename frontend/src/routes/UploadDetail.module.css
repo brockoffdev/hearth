@@ -244,6 +244,83 @@
   margin: 0;
 }
 
+/* ── Results view ────────────────────────────────────────────────────────── */
+
+.resultsTitle {
+  padding: 8px 22px 16px;
+}
+
+.doneLabel {
+  font-size: 12px;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.foundHeading {
+  font-family: var(--fontDisplay);
+  font-size: 30px;
+  line-height: 34px;
+  color: var(--fg);
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+
+.foundAccent {
+  color: var(--accent);
+}
+
+.foundSubtitle {
+  font-size: 14px;
+  color: var(--fgSoft);
+  margin: 0;
+}
+
+.autoCount {
+  color: var(--success);
+}
+
+.reviewCount {
+  color: var(--warn);
+}
+
+.eventList {
+  padding: 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.resultsBottom {
+  flex: 1;
+  min-height: 24px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 28px;
+  gap: 16px;
+  text-align: center;
+}
+
+.emptyText {
+  font-family: var(--fontBody);
+  font-size: 15px;
+  color: var(--fgSoft);
+  margin: 0;
+  max-width: 300px;
+  line-height: 1.5;
+}
+
 /* ── Terminal views ──────────────────────────────────────────────────────── */
 
 .completeView,

@@ -8,7 +8,8 @@ import { SetupFamily } from './routes/SetupFamily';
 import { Upload } from './routes/Upload';
 import { UploadDetail } from './routes/UploadDetail';
 import { Status } from './routes/Status';
-import { ReviewPlaceholder } from './routes/ReviewPlaceholder';
+import { Review } from './routes/Review';
+import { ReviewItem } from './routes/ReviewItem';
 import { CalendarPlaceholder } from './routes/CalendarPlaceholder';
 import { RequireAuth } from './auth/RequireAuth';
 import { WizardGate } from './auth/WizardGate';
@@ -43,7 +44,8 @@ export function App() {
         <Route path="/upload" element={<Upload />} />
         <Route path="/uploads" element={<Status />} />
         <Route path="/uploads/:id" element={<UploadDetail />} />
-        <Route path="/review" element={<ReviewPlaceholder />} />
+        <Route path="/review" element={<Review />} />
+        <Route path="/review/:id" element={<ReviewItem />} />
         <Route path="/calendar" element={<CalendarPlaceholder />} />
         <Route path="/" element={<Index />} />
         <Route path="*" element={<Index />} />
