@@ -369,3 +369,67 @@ describe('useUploads — refetch', () => {
     );
   });
 });
+
+describe('useUploads — lastFetchedAt', () => {
+  it('starts as null before data loads', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
+    );
+
+    const { result } = renderHook(() => useUploads());
+
+    expect(result.current.lastFetchedAt).toBeNull();
+  });
+
+  it('is set to a Date after successful initial fetch', async () => {
+    const before = new Date();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeResponse(200, [makeUpload()])),
+    );
+
+    const { result } = renderHook(() => useUploads());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.lastFetchedAt).not.toBeNull();
+    expect(result.current.lastFetchedAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
+  });
+
+  it('updates lastFetchedAt after each refetch', async () => {
+    const uploads: Upload[] = [makeUpload({ id: '1', status: 'completed' })];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeResponse(200, uploads)),
+    );
+
+    const { result } = renderHook(() => useUploads());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const firstFetchTime = result.current.lastFetchedAt;
+    expect(firstFetchTime).not.toBeNull();
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(result.current.lastFetchedAt).not.toBeNull();
+    expect(result.current.lastFetchedAt!.getTime()).toBeGreaterThanOrEqual(firstFetchTime!.getTime());
+  });
+
+  it('does not update lastFetchedAt when fetch fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeResponse(500, { detail: 'Server error' })),
+    );
+
+    const { result } = renderHook(() => useUploads());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.lastFetchedAt).toBeNull();
+    expect(result.current.loadError).not.toBeNull();
+  });
+});

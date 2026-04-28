@@ -12,6 +12,7 @@ interface UseUploadsResult {
   longestETA: number;
   isLoading: boolean;
   loadError: string | null;
+  lastFetchedAt: Date | null;
   refetch: () => Promise<void>;
   retry: (id: string | number) => Promise<Upload>;
   cancel: (id: string | number) => Promise<void>;
@@ -37,12 +38,14 @@ export function useUploads(): UseUploadsResult {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
   const fetchUploads = useCallback(async (): Promise<void> => {
     try {
       const data = await listUploads();
       setUploads(data);
       setLoadError(null);
+      setLastFetchedAt(new Date());
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load uploads');
     }
@@ -62,6 +65,7 @@ export function useUploads(): UseUploadsResult {
         if (cancelled) return;
         setUploads(data);
         setLoadError(null);
+        setLastFetchedAt(new Date());
       } catch (err) {
         if (cancelled) return;
         setLoadError(err instanceof Error ? err.message : 'Failed to load uploads');
@@ -117,6 +121,7 @@ export function useUploads(): UseUploadsResult {
     longestETA,
     isLoading,
     loadError,
+    lastFetchedAt,
     refetch,
     retry,
     cancel,
