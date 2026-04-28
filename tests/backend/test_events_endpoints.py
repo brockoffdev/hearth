@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from backend.app.auth.bootstrap import ensure_bootstrap_admin
 from backend.app.auth.passwords import hash_password
+from backend.app.config import get_settings
 from backend.app.db.base import get_session_factory
 from backend.app.db.models import Event, EventCorrection, FamilyMember, Upload, User
 from backend.app.main import create_app
@@ -40,6 +42,30 @@ async def bootstrapped_client(
     factory = get_session_factory(db_engine)
     await ensure_bootstrap_admin(factory)
     return client
+
+
+@pytest.fixture
+async def client_with_data_dir(
+    db_engine: AsyncEngine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncClient:
+    """AsyncClient with a temp data_dir; settings cache cleared so the dir is visible."""
+    monkeypatch.setenv("HEARTH_DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    app = create_app()
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://test")
+
+
+@pytest.fixture
+async def bootstrapped_client_with_data_dir(
+    db_engine: AsyncEngine,
+    client_with_data_dir: AsyncClient,
+) -> AsyncClient:
+    factory = get_session_factory(db_engine)
+    await ensure_bootstrap_admin(factory)
+    return client_with_data_dir
 
 
 async def _login_admin(ac: AsyncClient) -> None:
@@ -118,6 +144,7 @@ async def _create_event(
     status: str = "pending_review",
     start_dt: datetime | None = None,
     created_at: datetime | None = None,
+    cell_crop_path: str | None = None,
 ) -> Event:
     factory = get_session_factory(db_engine)
     async with factory() as session:
@@ -127,6 +154,7 @@ async def _create_event(
             title=title,
             start_dt=start_dt or datetime(2026, 6, 15, 10, 0),
             status=status,
+            cell_crop_path=cell_crop_path,
         )
         if created_at is not None:
             ev.created_at = created_at
@@ -778,3 +806,212 @@ async def test_delete_event_404_when_missing(
         resp = await ac.delete("/api/events/99999")
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Tests — Cell-crop serving
+# ---------------------------------------------------------------------------
+
+
+async def test_get_cell_crop_returns_image_bytes(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+    tmp_path: Path,
+) -> None:
+    """GET /api/events/{id}/cell-crop returns 200 with JPEG bytes and correct content-type."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+
+    rel_path = "uploads/ab/cdef1234/original.jpg"
+    abs_path = tmp_path / rel_path
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    fake_bytes = b"\xff\xd8\xff\xe0fake-jpeg-bytes"
+    abs_path.write_bytes(fake_bytes)
+
+    event = await _create_event(
+        db_engine, upload_id=upload.id, cell_crop_path=rel_path
+    )
+
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_admin(ac)
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/jpeg"
+    assert resp.content == fake_bytes
+
+
+async def test_get_cell_crop_returns_correct_media_type_for_png(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+    tmp_path: Path,
+) -> None:
+    """GET /api/events/{id}/cell-crop returns image/png for a .png file."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+
+    rel_path = "uploads/ab/cdef1234/original.png"
+    abs_path = tmp_path / rel_path
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    fake_bytes = b"\x89PNG\r\nfake-png"
+    abs_path.write_bytes(fake_bytes)
+
+    event = await _create_event(
+        db_engine, upload_id=upload.id, cell_crop_path=rel_path
+    )
+
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_admin(ac)
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert resp.content == fake_bytes
+
+
+async def test_get_cell_crop_404_when_event_missing(
+    bootstrapped_client_with_data_dir: AsyncClient,
+) -> None:
+    """GET /api/events/99999/cell-crop returns 404 when the event doesn't exist."""
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_admin(ac)
+        resp = await ac.get("/api/events/99999/cell-crop")
+
+    assert resp.status_code == 404
+
+
+async def test_get_cell_crop_404_when_no_crop_path(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """GET /api/events/{id}/cell-crop returns 404 when cell_crop_path is None."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id, cell_crop_path=None)
+
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_admin(ac)
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "No cell crop for this event"
+
+
+async def test_get_cell_crop_404_when_file_missing_on_disk(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """GET /api/events/{id}/cell-crop returns 404 when the referenced file is absent."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        cell_crop_path="uploads/no/file/here/original.jpg",
+    )
+
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_admin(ac)
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Cell crop file not found on disk"
+
+
+async def test_get_cell_crop_400_on_path_traversal(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """GET /api/events/{id}/cell-crop returns 400 when cell_crop_path escapes data_dir."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        cell_crop_path="../../../etc/passwd",
+    )
+
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_admin(ac)
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Invalid cell crop path"
+
+
+async def test_get_cell_crop_403_when_other_user_non_admin(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+    tmp_path: Path,
+) -> None:
+    """Non-admin user cannot access another user's cell crop."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+
+    rel_path = "uploads/ab/cdef1234/original.jpg"
+    abs_path = tmp_path / rel_path
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    abs_path.write_bytes(b"\xff\xd8\xff\xe0fake")
+
+    event = await _create_event(
+        db_engine, upload_id=upload.id, cell_crop_path=rel_path
+    )
+
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_regular(ac, db_engine)
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 403
+
+
+async def test_get_cell_crop_admin_can_access_others_crops(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+    tmp_path: Path,
+) -> None:
+    """Admin can fetch the cell crop for any user's event."""
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        other = User(
+            username="other_crop_user",
+            password_hash="x",
+            role="user",
+        )
+        session.add(other)
+        await session.commit()
+        await session.refresh(other)
+        other_id = other.id
+
+    upload = await _create_upload(db_engine, other_id)
+
+    rel_path = "uploads/cc/ddee1234/original.jpg"
+    abs_path = tmp_path / rel_path
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    fake_bytes = b"\xff\xd8\xff\xe0admin-can-see"
+    abs_path.write_bytes(fake_bytes)
+
+    event = await _create_event(
+        db_engine, upload_id=upload.id, cell_crop_path=rel_path
+    )
+
+    async with bootstrapped_client_with_data_dir as ac:
+        await _login_admin(ac)
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 200
+    assert resp.content == fake_bytes
+
+
+async def test_get_cell_crop_requires_auth(
+    bootstrapped_client_with_data_dir: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """GET /api/events/{id}/cell-crop returns 401 when not authenticated."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id)
+
+    async with bootstrapped_client_with_data_dir as ac:
+        resp = await ac.get(f"/api/events/{event.id}/cell-crop")
+
+    assert resp.status_code == 401

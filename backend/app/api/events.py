@@ -11,15 +11,19 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.auth.dependencies import require_user
+from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import Event, EventCorrection, FamilyMember, Upload, User
+from backend.app.uploads.storage import read_photo
 
 router = APIRouter()
 
@@ -33,6 +37,13 @@ _DEFAULT_LIMIT = 100
 
 # Statuses that represent "terminal rejected" states — excluded by default.
 _EXCLUDED_STATUSES = {"rejected", "superseded"}
+
+_EXT_TO_MEDIA_TYPE: dict[str, str] = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -320,3 +331,33 @@ async def delete_event(
     event.updated_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     return None
+
+
+@router.get("/{event_id}/cell-crop")
+async def get_event_cell_crop(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """Return the raw cell-crop image bytes for an event."""
+    event = await _fetch_event_or_404(event_id, db)
+    await _check_event_access(event, current_user, db)
+
+    if event.cell_crop_path is None:
+        raise HTTPException(status_code=404, detail="No cell crop for this event")
+
+    resolved = (settings.data_dir / event.cell_crop_path).resolve()
+    if not str(resolved).startswith(str(settings.data_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid cell crop path")
+
+    try:
+        image_bytes = await read_photo(event.cell_crop_path, settings.data_dir)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail="Cell crop file not found on disk"
+        ) from exc
+
+    ext = Path(event.cell_crop_path).suffix.lower()
+    media_type = _EXT_TO_MEDIA_TYPE.get(ext, "application/octet-stream")
+    return Response(content=image_bytes, media_type=media_type)
