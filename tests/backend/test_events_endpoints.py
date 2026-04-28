@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -20,6 +21,7 @@ from backend.app.auth.passwords import hash_password
 from backend.app.config import get_settings
 from backend.app.db.base import get_session_factory
 from backend.app.db.models import Event, EventCorrection, FamilyMember, Upload, User
+from backend.app.google.publish import GcalError, InvalidGrantError, NoCalendarError, NoOauthError
 from backend.app.main import create_app
 
 # ---------------------------------------------------------------------------
@@ -145,6 +147,7 @@ async def _create_event(
     start_dt: datetime | None = None,
     created_at: datetime | None = None,
     cell_crop_path: str | None = None,
+    google_event_id: str | None = None,
 ) -> Event:
     factory = get_session_factory(db_engine)
     async with factory() as session:
@@ -155,6 +158,7 @@ async def _create_event(
             start_dt=start_dt or datetime(2026, 6, 15, 10, 0),
             status=status,
             cell_crop_path=cell_crop_path,
+            google_event_id=google_event_id,
         )
         if created_at is not None:
             ev.created_at = created_at
@@ -532,9 +536,10 @@ async def test_patch_event_no_changes_publishes_without_correction_row(
 
     original_updated_at = event.updated_at
 
-    async with bootstrapped_client as ac:
-        await _login_admin(ac)
-        resp = await ac.patch(f"/api/events/{event.id}", json={})
+    with patch("backend.app.api.events.publish_event", new=AsyncMock(return_value=event)):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={})
 
     assert resp.status_code == 200
     body = resp.json()
@@ -561,9 +566,10 @@ async def test_patch_event_with_title_change_writes_correction_row(
     upload = await _create_upload(db_engine, admin.id)
     event = await _create_event(db_engine, upload_id=upload.id, title="Old Title")
 
-    async with bootstrapped_client as ac:
-        await _login_admin(ac)
-        resp = await ac.patch(f"/api/events/{event.id}", json={"title": "New Title"})
+    with patch("backend.app.api.events.publish_event", new=AsyncMock(return_value=event)):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={"title": "New Title"})
 
     assert resp.status_code == 200
     body = resp.json()
@@ -595,12 +601,13 @@ async def test_patch_event_with_multiple_field_changes_writes_one_correction_row
     upload = await _create_upload(db_engine, admin.id)
     event = await _create_event(db_engine, upload_id=upload.id, title="Original")
 
-    async with bootstrapped_client as ac:
-        await _login_admin(ac)
-        resp = await ac.patch(
-            f"/api/events/{event.id}",
-            json={"title": "Updated", "location": "New Location", "notes": "Updated notes"},
-        )
+    with patch("backend.app.api.events.publish_event", new=AsyncMock(return_value=event)):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(
+                f"/api/events/{event.id}",
+                json={"title": "Updated", "location": "New Location", "notes": "Updated notes"},
+            )
 
     assert resp.status_code == 200
     body = resp.json()
@@ -629,12 +636,13 @@ async def test_patch_event_can_change_family_member_id(
 
     member = await _get_family_member_by_name(db_engine, "Bryant")
 
-    async with bootstrapped_client as ac:
-        await _login_admin(ac)
-        resp = await ac.patch(
-            f"/api/events/{event.id}",
-            json={"family_member_id": member.id},
-        )
+    with patch("backend.app.api.events.publish_event", new=AsyncMock(return_value=event)):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(
+                f"/api/events/{event.id}",
+                json={"family_member_id": member.id},
+            )
 
     assert resp.status_code == 200
     body = resp.json()
@@ -674,23 +682,25 @@ async def test_patch_event_400_when_already_superseded(
     assert resp.status_code == 400
 
 
-async def test_patch_event_does_not_call_google_calendar(
+async def test_patch_event_calls_publish_event_on_success(
     bootstrapped_client: AsyncClient,
     db_engine: AsyncEngine,
 ) -> None:
-    """PATCH does not set google_event_id or published_at (Phase 7 responsibility)."""
+    """PATCH calls publish_event and returns the published event."""
     admin = await _get_admin_user(db_engine)
     upload = await _create_upload(db_engine, admin.id)
-    event = await _create_event(db_engine, upload_id=upload.id, title="No GCal Event")
+    event = await _create_event(db_engine, upload_id=upload.id, title="GCal Event")
 
-    async with bootstrapped_client as ac:
-        await _login_admin(ac)
-        resp = await ac.patch(f"/api/events/{event.id}", json={"title": "Updated"})
+    mock_published = AsyncMock()
+
+    with patch("backend.app.api.events.publish_event", new=mock_published) as mock_publish:
+        mock_publish.return_value = event
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={"title": "Updated"})
 
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["google_event_id"] is None
-    assert body["published_at"] is None
+    mock_publish.assert_called_once()
 
 
 async def test_patch_event_403_when_other_user_non_admin(
@@ -1015,3 +1025,414 @@ async def test_get_cell_crop_requires_auth(
         resp = await ac.get(f"/api/events/{event.id}/cell-crop")
 
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Tests — PATCH GCal wiring (Phase 7 Task C)
+# ---------------------------------------------------------------------------
+
+
+async def test_patch_event_publishes_unchanged_save_path(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """publish_event is called even when no fields changed (confirm-as-is)."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id)
+
+    mock_published = AsyncMock(return_value=event)
+
+    with patch("backend.app.api.events.publish_event", new=mock_published) as mock_publish:
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={})
+
+    assert resp.status_code == 200
+    mock_publish.assert_called_once()
+
+
+async def test_patch_event_503_on_no_oauth(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """NoOauthError from publish_event → 503, status reverts to pending_review."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id)
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=NoOauthError("no token")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={})
+
+    assert resp.status_code == 503
+    assert "Google Calendar not connected" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+
+
+async def test_patch_event_503_on_invalid_grant(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """InvalidGrantError from publish_event → 503."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id)
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=InvalidGrantError("token revoked")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={})
+
+    assert resp.status_code == 503
+    assert "token expired" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+
+
+async def test_patch_event_400_on_no_calendar(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """NoCalendarError from publish_event → 400, status reverts to pending_review."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id)
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=NoCalendarError("no calendar")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={})
+
+    assert resp.status_code == 400
+    assert "no Google Calendar mapping" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+
+
+async def test_patch_event_502_on_gcal_error(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """GcalError from publish_event → 502, status reverts to pending_review."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id)
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=GcalError("quota exceeded", status_code=429)),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={})
+
+    assert resp.status_code == 502
+    assert "Google Calendar error" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+
+
+async def test_patch_event_502_on_unexpected_error(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Unexpected exception from publish_event → 502, status reverts to pending_review."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id)
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=RuntimeError("unexpected")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={})
+
+    assert resp.status_code == 502
+    assert "Unexpected error" in resp.json()["detail"]
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "pending_review"
+
+
+async def test_patch_event_does_not_revert_status_when_already_published(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """When the event already had a google_event_id, a GCal failure does not revert status."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    # Pre-existing published event with a GCal ID.
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="published",
+        google_event_id="gcal-existing-id",
+    )
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=GcalError("server error", status_code=500)),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.patch(f"/api/events/{event.id}", json={"title": "Updated Title"})
+
+    assert resp.status_code == 502
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    # Status stays published — it was already published before this PATCH.
+    assert fetched.status == "published"
+
+
+async def test_patch_event_revert_preserves_field_edits(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """On GCal failure, field edits survive the revert — only status goes back."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id, title="Original Title")
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=NoOauthError("no token")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            await ac.patch(f"/api/events/{event.id}", json={"title": "New Title"})
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+
+    assert fetched.title == "New Title"
+    assert fetched.status == "pending_review"
+
+
+async def test_patch_event_revert_keeps_correction_row(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """EventCorrection row written before publish failure is preserved (audit trail)."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id, title="Before")
+
+    with patch(
+        "backend.app.api.events.publish_event",
+        new=AsyncMock(side_effect=GcalError("error")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            await ac.patch(f"/api/events/{event.id}", json={"title": "After"})
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(
+            select(EventCorrection).where(EventCorrection.event_id == event.id)
+        )
+        corrections = list(result.scalars().all())
+
+    assert len(corrections) == 1
+    before = json.loads(corrections[0].before_json)
+    after = json.loads(corrections[0].after_json)
+    assert before["title"] == "Before"
+    assert after["title"] == "After"
+
+
+# ---------------------------------------------------------------------------
+# Tests — DELETE GCal wiring (Phase 7 Task C)
+# ---------------------------------------------------------------------------
+
+
+async def test_delete_event_calls_unpublish_when_google_event_id_set(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """DELETE calls unpublish_event when the event has a google_event_id."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="published",
+        google_event_id="gcal-id-to-remove",
+    )
+
+    mock_unpublish = AsyncMock(return_value=event)
+
+    with patch("backend.app.api.events.unpublish_event", new=mock_unpublish) as mock_unp:
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.delete(f"/api/events/{event.id}")
+
+    assert resp.status_code == 204
+    mock_unp.assert_called_once()
+
+
+async def test_delete_event_skips_unpublish_when_google_event_id_null(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """DELETE does not call unpublish_event when google_event_id is None."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(db_engine, upload_id=upload.id, google_event_id=None)
+
+    mock_unpublish = AsyncMock()
+
+    with patch("backend.app.api.events.unpublish_event", new=mock_unpublish) as mock_unp:
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.delete(f"/api/events/{event.id}")
+
+    assert resp.status_code == 204
+    mock_unp.assert_not_called()
+
+
+async def test_delete_event_returns_204_even_on_unpublish_failure(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """DELETE returns 204 even when unpublish_event raises GcalError."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="published",
+        google_event_id="gcal-stale-id",
+    )
+
+    with patch(
+        "backend.app.api.events.unpublish_event",
+        new=AsyncMock(side_effect=GcalError("network error")),
+    ):
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.delete(f"/api/events/{event.id}")
+
+    assert resp.status_code == 204
+
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        result = await session.execute(select(Event).where(Event.id == event.id))
+        fetched = result.scalar_one()
+    assert fetched.status == "rejected"
+
+
+async def test_delete_event_logs_warning_on_unpublish_no_oauth(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """NoOauthError during DELETE is logged as warning; soft-reject still proceeds."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="published",
+        google_event_id="gcal-id",
+    )
+
+    with patch(
+        "backend.app.api.events.unpublish_event",
+        new=AsyncMock(side_effect=NoOauthError("no token")),
+    ), patch("backend.app.api.events.logger") as mock_logger:
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.delete(f"/api/events/{event.id}")
+
+    assert resp.status_code == 204
+    warning_calls = [str(c.args) for c in mock_logger.warning.call_args_list]
+    assert any("OAuth" in s or "oauth" in s.lower() for s in warning_calls)
+
+
+async def test_delete_event_logs_warning_on_unpublish_gcal_error(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """GcalError during DELETE is logged as warning; soft-reject still proceeds."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="published",
+        google_event_id="gcal-id",
+    )
+
+    with patch(
+        "backend.app.api.events.unpublish_event",
+        new=AsyncMock(side_effect=GcalError("rate limit", status_code=429)),
+    ), patch("backend.app.api.events.logger") as mock_logger:
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.delete(f"/api/events/{event.id}")
+
+    assert resp.status_code == 204
+    warning_calls = [str(c.args) for c in mock_logger.warning.call_args_list]
+    assert any("GCal" in s or "gcal" in s.lower() or "GCal error" in s for s in warning_calls)
+
+
+async def test_delete_event_logs_exception_on_unpublish_unexpected_error(
+    bootstrapped_client: AsyncClient,
+    db_engine: AsyncEngine,
+) -> None:
+    """Unexpected exception during DELETE is logged via logger.exception; 204 still returned."""
+    admin = await _get_admin_user(db_engine)
+    upload = await _create_upload(db_engine, admin.id)
+    event = await _create_event(
+        db_engine,
+        upload_id=upload.id,
+        status="published",
+        google_event_id="gcal-id",
+    )
+
+    with patch(
+        "backend.app.api.events.unpublish_event",
+        new=AsyncMock(side_effect=RuntimeError("unexpected")),
+    ), patch("backend.app.api.events.logger") as mock_logger:
+        async with bootstrapped_client as ac:
+            await _login_admin(ac)
+            resp = await ac.delete(f"/api/events/{event.id}")
+
+    assert resp.status_code == 204
+    assert mock_logger.exception.called
