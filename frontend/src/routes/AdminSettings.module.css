@@ -1,0 +1,352 @@
+/* AdminSettings route */
+/* Token-only. All colours via CSS custom properties. */
+
+/* ─── Page shell ────────────────────────────────────────────── */
+
+.page {
+  display: contents;
+  font-family: var(--fontBody);
+  color: var(--fg);
+}
+
+/* ─── Desktop layout (default) ──────────────────────────────── */
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+/* ─── Content area ───────────────────────────────────────────── */
+
+.content {
+  flex: 1;
+  padding: 36px;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ─── Page heading ───────────────────────────────────────────── */
+
+.heading {
+  margin-bottom: 28px;
+}
+
+.adminLabel {
+  font-size: 11px;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.title {
+  font-family: var(--fontDisplay);
+  font-size: 38px;
+  line-height: 1.1;
+  letter-spacing: -0.8px;
+  color: var(--fg);
+  margin: 0 0 6px;
+}
+
+.titleAccent {
+  font-style: italic;
+  color: var(--accent);
+}
+
+/* ─── Card grid ──────────────────────────────────────────────── */
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* ─── Individual card ────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 20px 22px;
+}
+
+.cardTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin: 0 0 14px;
+}
+
+/* ─── Vision provider card ────────────────────────────────────── */
+
+.providerList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.providerOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition: border-color 0.12s;
+}
+
+.providerOption:hover {
+  border-color: var(--rule);
+}
+
+.providerOptionActive {
+  composes: providerOption;
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
+.providerRadio {
+  margin-top: 2px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.providerInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.providerName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.providerCost {
+  font-size: 12px;
+  color: var(--fgSoft);
+}
+
+.providerFields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fgSoft);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.fieldInput {
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--fontBody);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.fieldInput:focus {
+  border-color: var(--accent);
+}
+
+.apiKeyRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.apiKeyInput {
+  composes: fieldInput;
+  flex: 1;
+}
+
+.clearKeyBtn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fgSoft);
+  background: var(--surfaceMuted);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.clearKeyBtn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ─── Confidence card ────────────────────────────────────────── */
+
+.bigNumber {
+  font-family: var(--fontDisplay);
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.slider {
+  width: 100%;
+  accent-color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.sliderLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--fgSoft);
+}
+
+/* ─── Few-shot card ──────────────────────────────────────────── */
+
+.numberInputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stepBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--surfaceMuted);
+  color: var(--fg);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: var(--fontBody);
+}
+
+.stepBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stepBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.numberDisplay {
+  font-family: var(--fontDisplay);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--fg);
+  min-width: 40px;
+  text-align: center;
+}
+
+.rangeHint {
+  font-size: 12px;
+  color: var(--fgSoft);
+}
+
+/* ─── Performance card ───────────────────────────────────────── */
+
+.perfPlaceholder {
+  font-size: 13px;
+  color: var(--fgSoft);
+  font-style: italic;
+}
+
+/* ─── Save bar ───────────────────────────────────────────────── */
+
+.saveBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.savedMsg {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
+}
+
+/* ─── 403 view ───────────────────────────────────────────────── */
+
+.forbidden {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+.forbiddenCard {
+  text-align: center;
+  padding: 48px 32px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  max-width: 320px;
+}
+
+.forbiddenTitle {
+  font-family: var(--fontDisplay);
+  font-size: 28px;
+  letter-spacing: -0.5px;
+  color: var(--danger);
+  margin: 0 0 8px;
+}
+
+.forbiddenText {
+  font-size: 14px;
+  color: var(--fgSoft);
+  margin: 0;
+}
+
+/* ─── Mobile (under 640px) ───────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .content {
+    padding: 24px 16px;
+    padding-top: 56px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+}

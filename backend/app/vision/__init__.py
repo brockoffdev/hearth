@@ -11,9 +11,11 @@ This module defines:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.app.config import Settings
 
 
@@ -181,10 +183,64 @@ def get_vision_provider(settings: Settings) -> VisionProvider:
     raise NotImplementedError(f"Unknown vision_provider: {settings.vision_provider}")
 
 
+def get_vision_provider_from_dict(effective: dict[str, Any]) -> VisionProvider:
+    """Build a VisionProvider from a pre-resolved effective-settings dict.
+
+    Accepts the dict returned by config_overrides.get_effective_settings so
+    that callers can pass DB+env-merged values without constructing a Settings
+    object.
+    """
+    provider = effective.get("vision_provider", "ollama")
+
+    if provider == "ollama":
+        from .ollama_provider import OllamaProvider
+
+        return OllamaProvider(
+            endpoint=effective.get("ollama_endpoint", "http://localhost:11434"),
+            model=effective.get("vision_model", "qwen2.5-vl:7b"),
+        )
+
+    if provider == "gemini":
+        from .gemini_provider import GeminiProvider
+
+        api_key = effective.get("gemini_api_key", "")
+        if not api_key:
+            raise ValueError(
+                "HEARTH_GEMINI_API_KEY is required when vision_provider='gemini'"
+            )
+        return GeminiProvider(api_key=api_key, model=effective.get("vision_model", ""))
+
+    if provider == "anthropic":
+        from .anthropic_provider import AnthropicProvider
+
+        api_key = effective.get("anthropic_api_key", "")
+        if not api_key:
+            raise ValueError(
+                "HEARTH_ANTHROPIC_API_KEY is required when vision_provider='anthropic'"
+            )
+        return AnthropicProvider(api_key=api_key, model=effective.get("vision_model", ""))
+
+    raise NotImplementedError(f"Unknown vision_provider: {provider}")
+
+
+async def get_effective_vision_provider(session: AsyncSession) -> VisionProvider:
+    """Resolve DB overrides and build the configured VisionProvider.
+
+    Keeps the new DB-override logic local to vision configuration; callers
+    in the pipeline pass a session rather than env-only Settings.
+    """
+    from backend.app.config_overrides import get_effective_settings
+
+    effective = await get_effective_settings(session)
+    return get_vision_provider_from_dict(effective)
+
+
 __all__ = [
     "CellPromptContext",
     "ExtractedEvent",
     "FamilyPaletteEntry",
     "VisionProvider",
+    "get_effective_vision_provider",
     "get_vision_provider",
+    "get_vision_provider_from_dict",
 ]

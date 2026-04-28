@@ -26,6 +26,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.config import Settings, get_settings
+from backend.app.config_overrides import get_effective_settings
 from backend.app.db.models import Event, FamilyMember, PipelineStageDuration, Upload
 from backend.app.google.publish import (
     GcalError,
@@ -44,6 +45,7 @@ from backend.app.uploads.pipeline import (
 from backend.app.uploads.preprocessing import extract_photographed_date
 from backend.app.uploads.queue import acquire_pipeline_slot, enqueue, queue_position
 from backend.app.uploads.storage import read_photo
+from backend.app.vision import get_effective_vision_provider
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,7 @@ async def persist_and_maybe_publish(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
     publish_state: dict[str, bool],
+    confidence_threshold: float | None = None,
 ) -> None:
     """Persist one extracted event and, when eligible, push it to GCal.
 
@@ -108,11 +111,19 @@ async def persist_and_maybe_publish(
     previous call in the same pipeline run hit an InvalidGrantError the flag is
     set to True; subsequent auto-publish attempts are skipped so we don't flood
     the Google API with doomed refresh calls.
+
+    confidence_threshold overrides settings.confidence_threshold when provided,
+    letting the runner inject the effective (DB-override-aware) value.
     """
     start_dt = _parse_event_datetime(record.cell_date_iso, record.time_text)
+    effective_threshold = (
+        confidence_threshold
+        if confidence_threshold is not None
+        else settings.confidence_threshold
+    )
     status = (
         "auto_published"
-        if record.composite_confidence >= settings.confidence_threshold
+        if record.composite_confidence >= effective_threshold
         else "pending_review"
     )
     event = Event(
@@ -206,11 +217,18 @@ async def _run_chosen_pipeline(
             result = await session.execute(select(FamilyMember))
             family_members = list(result.scalars().all())
 
+        # Resolve effective settings (DB overrides + env) and vision provider.
+        async with session_factory() as session:
+            effective = await get_effective_settings(session)
+            provider = await get_effective_vision_provider(session)
+        effective_few_shot_window: int = effective["few_shot_correction_window"]
+        effective_confidence: float = effective["confidence_threshold"]
+
         # Fetch recent corrections for the few-shot VLM prompt (once per run).
-        if settings.few_shot_correction_window > 0:
+        if effective_few_shot_window > 0:
             async with session_factory() as session:
                 corrections = await fetch_recent_corrections(
-                    session, limit=settings.few_shot_correction_window
+                    session, limit=effective_few_shot_window
                 )
         else:
             corrections = ()
@@ -239,6 +257,7 @@ async def _run_chosen_pipeline(
                 session_factory=session_factory,
                 settings=settings,
                 publish_state=publish_state,
+                confidence_threshold=effective_confidence,
             )
 
         async for stage_event in run_pipeline(
@@ -252,6 +271,7 @@ async def _run_chosen_pipeline(
             on_event_extracted=on_event_extracted,
             data_dir=settings.data_dir,
             photographed_month=photographed_date,
+            vision_provider_instance=provider,
         ):
             yield stage_event
     else:
