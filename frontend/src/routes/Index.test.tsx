@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ThemeProvider } from '../design/ThemeProvider';
 import { AuthProvider } from '../auth/AuthProvider';
+import { NewCaptureSheetProvider } from '../components/NewCaptureSheet';
 import { Index } from './Index';
 import type { User } from '../auth/AuthProvider';
 import type { UploadSummary } from '../lib/uploads';
@@ -67,11 +68,13 @@ function renderIndex() {
     <MemoryRouter initialEntries={['/']}>
       <ThemeProvider>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/upload" element={<div data-testid="upload-page">Upload</div>} />
-            <Route path="/uploads/:id" element={<div data-testid="upload-detail-page">Detail</div>} />
-          </Routes>
+          <NewCaptureSheetProvider>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/upload" element={<div data-testid="upload-page">Upload</div>} />
+              <Route path="/uploads/:id" element={<div data-testid="upload-detail-page">Detail</div>} />
+            </Routes>
+          </NewCaptureSheetProvider>
         </AuthProvider>
       </ThemeProvider>
     </MemoryRouter>,
@@ -98,7 +101,7 @@ describe('Index (MobileHome)', () => {
     );
   });
 
-  it('renders the "Take a photo" CTA linking to /upload', async () => {
+  it('renders the "Take a photo" CTA as a button that opens the capture sheet', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn()
@@ -110,9 +113,14 @@ describe('Index (MobileHome)', () => {
 
     await waitFor(() => expect(screen.getByText(/take a photo/i)).not.toBeNull());
 
-    const ctaLink = screen.getByRole('link', { name: /take a photo/i });
-    expect(ctaLink).not.toBeNull();
-    expect(ctaLink.getAttribute('href')).toBe('/upload');
+    // CTA is now a button (not a link)
+    const ctaBtn = screen.getByRole('button', { name: /take a photo/i });
+    expect(ctaBtn).not.toBeNull();
+
+    // Clicking it opens the NewCaptureSheet (dialog)
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(ctaBtn);
+    expect(screen.getByRole('dialog')).not.toBeNull();
   });
 
   it('shows loading skeleton rows before data loads', async () => {

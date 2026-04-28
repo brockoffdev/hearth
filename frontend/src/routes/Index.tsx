@@ -4,6 +4,7 @@ import { useTheme } from '../design/ThemeProvider';
 import { THEME_LABELS } from '../design/themeLabels';
 import { useAuth } from '../auth/AuthProvider';
 import { HearthWordmark } from '../components/HearthWordmark';
+import { useNewCaptureSheet } from '../components/NewCaptureSheet';
 import { listUploads } from '../lib/uploads';
 import type { UploadSummary } from '../lib/uploads';
 import { formatRelativeTime } from '../lib/relativeTime';
@@ -66,6 +67,7 @@ function SkeletonRow() {
 export function Index(): JSX.Element {
   const { theme, cycleTheme } = useTheme();
   const { state, logout } = useAuth();
+  const sheet = useNewCaptureSheet();
 
   const username =
     state.status === 'authenticated' ? state.user.username : '';
@@ -128,9 +130,9 @@ export function Index(): JSX.Element {
         </p>
 
         {/* Take a photo CTA */}
-        <Link to="/upload" className={styles.ctaLink}>
+        <button type="button" className={styles.ctaLink} onClick={sheet.open}>
           📷 Take a photo
-        </Link>
+        </button>
 
         {/* Recent uploads */}
         <section className={styles.recentSection}>
