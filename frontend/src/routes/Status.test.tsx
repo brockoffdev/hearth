@@ -309,6 +309,21 @@ describe('Status route — InflightRow (running)', () => {
     expect(screen.getByText(/reading cells · 12 of 35/i)).not.toBeNull();
   });
 
+  it('does not render "undefined" when totalCells is null', () => {
+    mockUploadsState = {
+      uploads: [{ ...INFLIGHT_RUNNING, totalCells: undefined }],
+      inflightCount: 1,
+      longestETA: 184,
+      isLoading: false,
+      loadError: null,
+    };
+    renderStatus();
+    // Should fall back to "cell N" form instead of "N of undefined"
+    const stageLabel = screen.getByTestId('inflight-row-u-1').textContent ?? '';
+    expect(stageLabel).not.toMatch(/undefined/i);
+    expect(stageLabel).toMatch(/cell 12/i);
+  });
+
   it('shows ETA remaining text', () => {
     renderStatus();
     expect(screen.getAllByText(/remaining/).length).toBeGreaterThanOrEqual(1);

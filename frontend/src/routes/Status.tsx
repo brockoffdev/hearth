@@ -38,8 +38,14 @@ export function InflightRow({ upload }: InflightRowProps): JSX.Element {
   const completed = (upload.completed_stages ?? []).length;
   const pct = Math.min(100, Math.round((completed / TOTAL_STAGES) * 100));
   const isCellStage = upload.current_stage === 'cell_progress' && upload.cellProgress != null;
+  const cellSuffix =
+    upload.cellProgress != null && upload.totalCells != null && upload.totalCells > 0
+      ? ` · ${upload.cellProgress} of ${upload.totalCells}`
+      : upload.cellProgress != null
+        ? ` · cell ${upload.cellProgress}`
+        : '';
   const headline = isCellStage
-    ? `${stageLabel(upload.current_stage ?? '')} · ${upload.cellProgress} of ${upload.totalCells}`
+    ? `${stageLabel(upload.current_stage ?? '')}${cellSuffix}`
     : stageLabel(upload.current_stage ?? '');
 
   return (

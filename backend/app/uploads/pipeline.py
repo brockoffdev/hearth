@@ -270,6 +270,15 @@ async def run_fake_pipeline(
                 )
                 if cell_delay_seconds > 0 and cell_n < FAKE_TOTAL_CELLS:
                     await asyncio.sleep(cell_delay_seconds)
+        elif stage_key == "grid_detected":
+            # Emit total cell count immediately after grid detection so the UI
+            # can show "of N" before the slow model_loading stage begins.
+            yield StageEvent(
+                stage="grid_detected",
+                progress={"cell": 0, "total": FAKE_TOTAL_CELLS},
+                completed_stages=completed.copy(),
+                remaining_seconds=estimate_remaining_seconds(completed),
+            )
         else:
             yield StageEvent(
                 stage=stage_key,
@@ -359,12 +368,13 @@ async def run_pipeline(
     # ------------------------------------------------------------------
     # Stage 3: grid_detected
     # ------------------------------------------------------------------
+    grid = await detect_grid(preprocessed_bytes)
     yield StageEvent(
         stage="grid_detected",
+        progress={"cell": 0, "total": len(grid.cells)},
         completed_stages=completed.copy(),
         remaining_seconds=estimate_remaining_seconds(completed),
     )
-    grid = await detect_grid(preprocessed_bytes)
     completed.append("grid_detected")
 
     if not grid.cells:

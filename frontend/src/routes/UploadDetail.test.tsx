@@ -10,6 +10,7 @@ import { ThemeProvider } from '../design/ThemeProvider';
 import { AuthProvider } from '../auth/AuthProvider';
 import { UploadDetail } from './UploadDetail';
 import type { UploadSummary } from '../lib/uploads';
+import { HEARTH_STAGES } from '../lib/stages';
 
 // ---------------------------------------------------------------------------
 // MockEventSource
@@ -244,6 +245,39 @@ describe('UploadDetail — processing state', () => {
     });
   });
 
+  it('progress badge shows "N of HEARTH_STAGES.length-1" after stage_update', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    const source = MockEventSource.instances[0]!;
+
+    act(() => {
+      source.emit('stage_update', {
+        stage: 'preprocessing',
+        message: null,
+        progress: null,
+        completed_stages: ['received'],
+        remaining_seconds: 90,
+      });
+    });
+
+    // After receiving 'preprocessing' active with 'received' done:
+    // progressCount = 1 (received done) + 1 (preprocessing active) = 2
+    // Badge should read "2 of <HEARTH_STAGES.length - 1>" i.e. "2 of 9"
+    const expectedTotal = HEARTH_STAGES.length - 1;
+    await waitFor(() => {
+      expect(screen.getByText(new RegExp(`2 of ${expectedTotal}`))).toBeInTheDocument();
+    });
+  });
+
   it('subscribes to SSE at the correct URL', async () => {
     vi.stubGlobal(
       'fetch',
@@ -382,6 +416,45 @@ describe('UploadDetail — SSE error', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/connection lost/i)).toBeInTheDocument();
+    });
+  });
+
+  it('clears connection error banner when the next successful stage_update arrives', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        makeFetchResponse(200, makeUploadResponse()),
+      ),
+    );
+
+    renderDetail(7);
+
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    const source = MockEventSource.instances[0]!;
+
+    // First fire an SSE error — banner appears
+    act(() => {
+      source.emitError();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/connection lost/i)).toBeInTheDocument();
+    });
+
+    // Then a successful stage_update arrives — banner must be cleared
+    act(() => {
+      source.emit('stage_update', {
+        stage: 'preprocessing',
+        message: null,
+        progress: null,
+        completed_stages: ['received'],
+        remaining_seconds: 90,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/connection lost/i)).not.toBeInTheDocument();
     });
   });
 });
