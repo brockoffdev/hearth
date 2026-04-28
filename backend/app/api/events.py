@@ -1,16 +1,19 @@
-"""Events API endpoints — Phase 6 Task A / Phase 7 Task C.
+"""Events API endpoints — Phase 6 Task A / Phase 7 Task C / Phase 10 Task A.
 
 Routes:
-  GET    /api/events              — list events (filterable by status, upload_id)
-  GET    /api/events/{id}         — single event detail
-  PATCH  /api/events/{id}         — update fields + publish (syncs to GCal)
-  DELETE /api/events/{id}         — soft-delete (status → rejected, best-effort GCal removal)
+  GET    /api/events                  — list events (filterable by status, upload_id)
+  GET    /api/events/pending-count    — count of pending_review events for current user
+  GET    /api/events/{id}             — single event detail
+  PATCH  /api/events/{id}             — update fields + publish (syncs to GCal)
+  POST   /api/events/{id}/republish   — retry publish for a pending_review event
+  DELETE /api/events/{id}             — soft-delete (status → rejected, best-effort GCal removal)
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -99,6 +102,10 @@ class PatchEventRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class PendingCountResponse(BaseModel):
+    count: int
+
+
 # ---------------------------------------------------------------------------
 # Response builder
 # ---------------------------------------------------------------------------
@@ -140,6 +147,14 @@ def _snapshot_mutable_fields(event: Event) -> dict[str, object]:
         "location": event.location,
         "notes": event.notes,
     }
+
+
+def _strip_publish_failure_note(notes: str | None) -> str | None:
+    """Remove the auto-publish failure trailer from notes."""
+    if not notes:
+        return notes
+    cleaned = re.sub(r"\n\n\[Auto-publish failed:[^\]]*\]\s*$", "", notes)
+    return cleaned or None
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +252,28 @@ async def list_events(
         for e in events
     ]
     return {"items": [item.model_dump() for item in items], "total": total}
+
+
+@router.get("/pending-count")
+async def get_pending_count(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+) -> PendingCountResponse:
+    """Return the count of pending_review events visible to the current user."""
+    if current_user.role == "admin":
+        count_stmt = select(func.count()).where(Event.status == "pending_review")
+    else:
+        user_upload_ids = select(Upload.id).where(Upload.user_id == current_user.id)
+        count_stmt = (
+            select(func.count())
+            .select_from(Event)
+            .where(Event.status == "pending_review")
+            .where(Event.upload_id.in_(user_upload_ids))
+        )
+
+    result = await db.execute(count_stmt)
+    count = result.scalar_one()
+    return PendingCountResponse(count=count)
 
 
 @router.get("/{event_id}")
@@ -416,6 +453,84 @@ async def delete_event(
     event.updated_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     return None
+
+
+@router.post("/{event_id}/republish")
+async def republish_event(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+) -> dict[str, object]:
+    """Retry publishing a pending_review event to Google Calendar.
+
+    Unlike PATCH, this path is only valid for pending_review events and clears
+    the auto-publish failure breadcrumb from notes on success so the row looks
+    clean without requiring an edit.
+    """
+    event = await _fetch_event_or_404(event_id, db)
+    await _check_event_access(event, current_user, db)
+
+    if event.status != "pending_review":
+        raise HTTPException(
+            status_code=400,
+            detail="Event is not pending review; cannot republish",
+        )
+
+    event.status = "published"
+    event.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    await db.commit()
+
+    try:
+        await publish_event(db, event.id)
+    except NoOauthError as exc:
+        event.status = "pending_review"
+        await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Google Calendar not connected. Admin must complete /setup/google.",
+        ) from exc
+    except InvalidGrantError as exc:
+        event.status = "pending_review"
+        await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Google Calendar token expired. Admin must reconnect.",
+        ) from exc
+    except NoCalendarError as exc:
+        event.status = "pending_review"
+        await db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Family member has no Google Calendar mapping.",
+        ) from exc
+    except GcalError as exc:
+        event.status = "pending_review"
+        await db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail=f"Google Calendar error: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error republishing event %d to Google Calendar", event_id)
+        event.status = "pending_review"
+        await db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Unexpected error publishing to Google Calendar",
+        ) from exc
+
+    event.notes = _strip_publish_failure_note(event.notes)
+    await db.commit()
+    await db.refresh(event)
+
+    member: FamilyMember | None = None
+    if event.family_member_id is not None:
+        member_result = await db.execute(
+            select(FamilyMember).where(FamilyMember.id == event.family_member_id)
+        )
+        member = member_result.scalar_one_or_none()
+
+    return _to_response(event, member).model_dump()
 
 
 @router.get("/{event_id}/cell-crop")
