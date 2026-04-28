@@ -1,0 +1,233 @@
+/* ── Page shell ─────────────────────────────────────────────────────────── */
+
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: transparent;
+}
+
+.progressBadge {
+  font-family: var(--fontBody);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--fgSoft);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+/* ── Photo thumbnail ─────────────────────────────────────────────────────── */
+
+.thumbWrap {
+  display: flex;
+  justify-content: center;
+  padding: 0 20px 4px;
+}
+
+.photoThumb {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  flex-shrink: 0;
+}
+
+/* ── Caution text ────────────────────────────────────────────────────────── */
+
+.cautionText {
+  font-family: var(--fontBody);
+  font-size: 12px;
+  font-style: italic;
+  color: var(--fgSoft);
+  text-align: center;
+  padding: 8px 20px;
+  margin: 0;
+}
+
+/* ── SSE error banner ────────────────────────────────────────────────────── */
+
+.sseErrorBanner {
+  margin: 0 20px 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--danger) 25%, transparent);
+  color: var(--danger);
+  font-family: var(--fontBody);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ── Stage list ──────────────────────────────────────────────────────────── */
+
+.stageList {
+  list-style: none;
+  margin: 0;
+  padding: 8px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.stageRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.stageRow:last-child {
+  border-bottom: none;
+}
+
+/* ── Stage icon ──────────────────────────────────────────────────────────── */
+
+.stageIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Spinning icon for the active stage */
+.spinnerIcon svg {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Stage text block ────────────────────────────────────────────────────── */
+
+.stageText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stageLabel {
+  font-family: var(--fontBody);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.stageHint {
+  font-family: var(--fontBody);
+  font-size: 12px;
+  color: var(--fgSoft);
+  line-height: 1.4;
+}
+
+/* ── Stage variants via data-status ─────────────────────────────────────── */
+
+.stageRow[data-status='upcoming'] .stageLabel {
+  color: var(--fgSoft);
+  font-weight: 500;
+}
+
+.stageRow[data-status='active'] .stageLabel {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.stageRow[data-status='done'] .stageLabel {
+  color: var(--fgSoft);
+  font-weight: 500;
+}
+
+/* ── Cell progress bar ───────────────────────────────────────────────────── */
+
+.cellBar {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  overflow: hidden;
+}
+
+.cellBarFill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  width: var(--cell-pct, 0%);
+  transition: width 0.3s ease;
+}
+
+/* ── Terminal views ──────────────────────────────────────────────────────── */
+
+.completeView,
+.errorView {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  gap: 12px;
+  text-align: center;
+}
+
+.terminalIcon {
+  margin-bottom: 8px;
+}
+
+.completeTitle {
+  font-family: var(--fontDisplay);
+  font-size: 28px;
+  line-height: 1.2;
+  color: var(--fg);
+  font-weight: 500;
+  margin: 0;
+}
+
+.completeHint {
+  font-family: var(--fontBody);
+  font-size: 15px;
+  color: var(--fgSoft);
+  margin: 0;
+  max-width: 280px;
+}
+
+.errorTitle {
+  font-family: var(--fontDisplay);
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--fg);
+  font-weight: 500;
+  margin: 0;
+}
+
+.errorHint {
+  font-family: var(--fontBody);
+  font-size: 15px;
+  color: var(--fgSoft);
+  margin: 0;
+  max-width: 280px;
+}
