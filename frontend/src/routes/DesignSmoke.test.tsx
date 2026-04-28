@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 import { ThemeProvider } from '../design/ThemeProvider';
+import { NewCaptureSheetProvider } from '../components/NewCaptureSheet';
 import { DesignSmoke } from './DesignSmoke';
 import { formatETA, formatDuration } from '../lib/eta';
 
@@ -10,7 +11,9 @@ function renderSmoke() {
   return render(
     <MemoryRouter>
       <ThemeProvider>
-        <DesignSmoke />
+        <NewCaptureSheetProvider>
+          <DesignSmoke />
+        </NewCaptureSheetProvider>
       </ThemeProvider>
     </MemoryRouter>
   );
@@ -159,5 +162,21 @@ describe('DesignSmoke — Phase 3.5 primitives section', () => {
     renderSmoke();
     expect(screen.getByText(formatDuration(64))).not.toBeNull();
     expect(screen.getByText(formatDuration(120))).not.toBeNull();
+  });
+});
+
+describe('DesignSmoke — NewCaptureSheet trigger', () => {
+  it('renders the "Trigger New Capture sheet" button in the NewCaptureSheet section', () => {
+    const { container } = renderSmoke();
+    const section = container.querySelector('[data-testid="new-capture-sheet-section"]');
+    expect(section).not.toBeNull();
+    expect(screen.getByRole('button', { name: /trigger new capture sheet/i })).not.toBeNull();
+  });
+
+  it('clicking the trigger opens the capture sheet dialog', () => {
+    renderSmoke();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /trigger new capture sheet/i }));
+    expect(screen.getByRole('dialog')).not.toBeNull();
   });
 });

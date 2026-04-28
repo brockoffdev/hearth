@@ -19,6 +19,7 @@ import { SectionRule } from '../components/SectionRule';
 import { Chevron } from '../components/Chevron';
 import { BackChevron } from '../components/BackChevron';
 import { formatETA, formatDuration } from '../lib/eta';
+import { useNewCaptureSheet } from '../components/NewCaptureSheet';
 import styles from './DesignSmoke.module.css';
 
 const FAMILY_MEMBERS: FamilyMemberId[] = ['bryant', 'danielle', 'isabella', 'eliana', 'family'];
@@ -27,6 +28,7 @@ export function DesignSmoke() {
   const { theme, cycleTheme } = useTheme();
   const [inputValue, setInputValue] = useState('');
   const [pwValue, setPwValue] = useState('');
+  const captureSheet = useNewCaptureSheet();
 
   return (
     <div className={styles.page}>
@@ -283,6 +285,19 @@ export function DesignSmoke() {
               </DesktopShell>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* NewCaptureSheet trigger */}
+      <section className={styles.section} data-testid="new-capture-sheet-section">
+        <h2 className={styles.sectionTitle}>NewCaptureSheet</h2>
+        <div className={styles.row}>
+          <HBtn kind="primary" onClick={captureSheet.open} data-testid="trigger-new-capture-sheet">
+            Trigger New Capture sheet
+          </HBtn>
+          <span className={styles.swatchLabel}>
+            {captureSheet.isOpen ? 'open' : 'closed'}
+          </span>
         </div>
       </section>
 
