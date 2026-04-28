@@ -211,7 +211,7 @@ function ResultsView({ events, isLoading }: ResultsViewProps): JSX.Element {
                 key={event.id}
                 event={event}
                 showCellCrop
-                onClick={() => void navigate(`/queue/${event.id}`)}
+                onClick={() => void navigate(`/review/${event.id}`)}
               />
             ))}
           </div>

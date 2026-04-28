@@ -84,7 +84,7 @@ function renderDetail(id: string | number = 7) {
             <Route path="/uploads/:id" element={<UploadDetail />} />
             <Route path="/uploads" element={<div data-testid="uploads-page">Uploads</div>} />
             <Route path="/upload" element={<div data-testid="upload-page">Upload</div>} />
-            <Route path="/queue/:id" element={<div data-testid="queue-page">Queue</div>} />
+            <Route path="/review/:id" element={<div data-testid="review-page">Review</div>} />
             <Route path="/" element={<div data-testid="home-page">Home</div>} />
           </Routes>
         </AuthProvider>
@@ -788,7 +788,7 @@ describe('UploadDetail — Results view', () => {
     act(() => fireEvent.click(card));
 
     await waitFor(() => {
-      expect(screen.getByTestId('queue-page')).toBeInTheDocument();
+      expect(screen.getByTestId('review-page')).toBeInTheDocument();
     });
   });
 });
