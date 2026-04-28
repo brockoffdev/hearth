@@ -129,8 +129,16 @@ class VisionProvider(Protocol):
 def get_vision_provider(settings: Settings) -> VisionProvider:
     """Build the configured VisionProvider from application settings.
 
-    Phase 4 ships only the Ollama provider.  Phase 4 Task C adds Gemini and
-    Anthropic.
+    Supports three providers: "ollama" (local default), "gemini" (BYO Google
+    key), and "anthropic" (BYO Anthropic key).
+
+    When switching away from Ollama, set **both** ``vision_provider`` and
+    ``vision_model`` — the factory does not auto-select a provider-specific
+    default model.  Suggested defaults per spec §6.2:
+
+    - ``ollama``     → ``qwen2.5-vl:7b``
+    - ``gemini``     → ``gemini-2.5-flash``
+    - ``anthropic``  → ``claude-haiku-4-5``
 
     Args:
         settings: Loaded application settings.
@@ -139,7 +147,8 @@ def get_vision_provider(settings: Settings) -> VisionProvider:
         A VisionProvider instance matching settings.vision_provider.
 
     Raises:
-        NotImplementedError: For any provider not yet implemented.
+        ValueError:           When the chosen provider's API key is missing.
+        NotImplementedError:  For any unrecognised provider string.
     """
     if settings.vision_provider == "ollama":
         from .ollama_provider import OllamaProvider
@@ -148,7 +157,28 @@ def get_vision_provider(settings: Settings) -> VisionProvider:
             endpoint=settings.ollama_endpoint,
             model=settings.vision_model,
         )
-    raise NotImplementedError(f"Provider {settings.vision_provider!r} not implemented yet")
+
+    if settings.vision_provider == "gemini":
+        from .gemini_provider import GeminiProvider
+
+        if not settings.gemini_api_key:
+            raise ValueError(
+                "HEARTH_GEMINI_API_KEY is required when vision_provider='gemini'"
+            )
+        return GeminiProvider(api_key=settings.gemini_api_key, model=settings.vision_model)
+
+    if settings.vision_provider == "anthropic":
+        from .anthropic_provider import AnthropicProvider
+
+        if not settings.anthropic_api_key:
+            raise ValueError(
+                "HEARTH_ANTHROPIC_API_KEY is required when vision_provider='anthropic'"
+            )
+        return AnthropicProvider(
+            api_key=settings.anthropic_api_key, model=settings.vision_model
+        )
+
+    raise NotImplementedError(f"Unknown vision_provider: {settings.vision_provider}")
 
 
 __all__ = [
