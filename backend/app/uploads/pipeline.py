@@ -14,11 +14,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.uploads.color import match_ink_color_async
 from backend.app.uploads.grid_detect import crop_cell, detect_grid
@@ -57,9 +60,9 @@ HEARTH_STAGES_ORDER: tuple[str, ...] = (
 # A "fake" cell count for Phase 3 — Phase 4 replaces with real grid detection.
 FAKE_TOTAL_CELLS: int = 35
 
-# Hard-coded median durations per stage (Phase 3.5; Phase 4 will replace with
-# measured medians from pipeline_stage_durations table).
-STAGE_MEDIAN_SECONDS: dict[str, float] = {
+# Hard-coded baseline values (Phase 3.5 ships these; Phase 4+ measures real).
+# These remain as a fallback when pipeline_stage_durations has too few samples.
+STAGE_MEDIAN_BASELINE: Final[Mapping[str, float]] = {
     "received": 0.5,
     "preprocessing": 2.0,
     "grid_detected": 1.0,
@@ -72,8 +75,75 @@ STAGE_MEDIAN_SECONDS: dict[str, float] = {
     "done": 0.0,
 }
 
+# Module-level cache refreshed by the lifespan boot hook.
+# Starts at baseline; replaced by refresh_stage_medians_from_db() on startup.
+_stage_medians: dict[str, float] = dict(STAGE_MEDIAN_BASELINE)
 
-FULL_PIPELINE_MEDIAN_SECONDS: int = round(sum(STAGE_MEDIAN_SECONDS.values()))
+# Keep STAGE_MEDIAN_SECONDS as a compatibility alias so existing imports don't break.
+# Phase 4 Task H deprecates direct references; prefer get_stage_medians() instead.
+STAGE_MEDIAN_SECONDS: Mapping[str, float] = _stage_medians
+
+
+def get_stage_medians() -> Mapping[str, float]:
+    """Return the current stage-median map.
+
+    Initially returns STAGE_MEDIAN_BASELINE values.  After the lifespan boot
+    hook calls refresh_stage_medians_from_db(), returns measured medians for
+    stages with enough samples (fallback: baseline for stages with fewer than
+    min_samples_per_stage measurements).
+
+    Returns:
+        A mapping from stage name to median duration in seconds.
+    """
+    return _stage_medians
+
+
+async def refresh_stage_medians_from_db(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    min_samples_per_stage: int = 5,
+) -> None:
+    """Recompute stage medians from the pipeline_stage_durations table.
+
+    For each stage:
+      - If at least min_samples_per_stage measurements exist, use the median.
+      - Otherwise fall back to STAGE_MEDIAN_BASELINE for that stage.
+
+    Updates the module-level _stage_medians dict in place so all callers
+    (estimate_remaining_seconds, queue_wait_seconds_simple) see the new values.
+
+    Args:
+        session_factory: Async session maker for DB access.
+        min_samples_per_stage: Minimum number of measurements required before
+            the computed median overrides the baseline value.
+    """
+    from backend.app.db.models import PipelineStageDuration  # avoid circular import
+
+    async with session_factory() as session:
+        stmt = select(PipelineStageDuration.stage, PipelineStageDuration.duration_seconds)
+        result = await session.execute(stmt)
+        rows = result.all()
+
+    by_stage: dict[str, list[float]] = {}
+    for stage, duration in rows:
+        by_stage.setdefault(stage, []).append(float(duration))
+
+    new_medians: dict[str, float] = dict(STAGE_MEDIAN_BASELINE)
+    for stage, durations in by_stage.items():
+        if len(durations) >= min_samples_per_stage:
+            durations.sort()
+            mid = len(durations) // 2
+            if len(durations) % 2 == 0:
+                new_medians[stage] = (durations[mid - 1] + durations[mid]) / 2
+            else:
+                new_medians[stage] = durations[mid]
+        # else: leave the baseline value
+
+    _stage_medians.clear()
+    _stage_medians.update(new_medians)
+
+
+FULL_PIPELINE_MEDIAN_SECONDS: int = round(sum(STAGE_MEDIAN_BASELINE.values()))
 """Sum of all stage medians — used as an upper-bound per-upload ETA for queue waits."""
 
 
@@ -93,7 +163,8 @@ def queue_wait_seconds_simple(position: int) -> int:
 def estimate_remaining_seconds(completed: list[str]) -> int:
     """Sum medians of remaining stages.
 
-    Used until Phase 4 measures real durations and replaces with computed values.
+    Reads from get_stage_medians() so results reflect refreshed DB values
+    after refresh_stage_medians_from_db() has been called on startup.
 
     Args:
         completed: List of stage keys that have been completed so far.
@@ -102,9 +173,8 @@ def estimate_remaining_seconds(completed: list[str]) -> int:
         Estimated remaining seconds as an integer.
     """
     completed_set = set(completed)
-    total = sum(
-        STAGE_MEDIAN_SECONDS[s] for s in HEARTH_STAGES_ORDER if s not in completed_set
-    )
+    medians = get_stage_medians()
+    total = sum(medians.get(s, 0.0) for s in HEARTH_STAGES_ORDER if s not in completed_set)
     return round(total)
 
 
