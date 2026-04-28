@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Hearth — UI Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@400;600;700&family=Patrick+Hand&family=Nunito:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: -apple-system, system-ui, sans-serif; }
+  body { color: #1F1B16; }
+  .hearth-root { font-feature-settings: "ss01", "cv02"; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="tokens.js"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="primitives.jsx"></script>
+<script type="text/babel" src="mobile-screens.jsx"></script>
+<script type="text/babel" src="desktop-screens.jsx"></script>
+<script type="text/babel" src="tv-screens.jsx"></script>
+<script type="text/babel" src="mobile-status-v2.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "aesthetic": "ember",
+  "theme": "light",
+  "threshold": 85,
+  "provider": "ollama",
+  "sseStage": 4,
+  "elliePink": true,
+  "showSpec": false
+}/*EDITMODE-END*/;
+
+function buildVars(aestheticKey, themeKey) {
+  const a = window.HEARTH_AESTHETICS[aestheticKey];
+  const t = window.HEARTH_THEMES[themeKey];
+  return {
+    '--paper': a.paper, '--paperDeep': a.paperDeep, '--ink': a.ink, '--inkSoft': a.inkSoft,
+    '--rule': a.rule, '--accent': a.accent, '--accentSoft': a.accentSoft,
+    '--success': a.success, '--warn': a.warn, '--danger': a.danger,
+    '--fontDisplay': a.fontDisplay, '--fontBody': a.fontBody, '--fontMono': a.fontMono,
+    '--radius': a.radius + 'px', '--radiusLg': a.radiusLg + 'px',
+    '--bg': t.bg, '--bgDeep': t.bgDeep, '--fg': t.fg, '--fgSoft': t.fgSoft,
+    '--surface': t.surface, '--surfaceMuted': t.surfaceMuted,
+    fontFamily: a.fontBody,
+    color: t.fg,
+    background: t.bg,
+  };
+}
+
+function App() {
+  const [tweaks, setTweak] = window.useTweaks(TWEAK_DEFAULTS);
+  const family = useMemo(() => {
+    const f = JSON.parse(JSON.stringify(window.HEARTH_FAMILY_DEFAULT));
+    if (tweaks.elliePink) f.find(x => x.id === 'eliana').hex = '#E17AA1';
+    return f;
+  }, [tweaks.elliePink]);
+
+  const vars = buildVars(tweaks.aesthetic, tweaks.theme);
+
+  return (
+    <div className="hearth-root" style={{ ...vars, minHeight: '100vh' }}>
+      <DesignCanvas>
+
+        <DCSection id="overview" title="Hearth · UI Design"
+          subtitle="A self-hosted bridge from a wall calendar to Google Calendar. 18 surfaces across mobile, desktop, and TV.">
+          <DCArtboard id="cover" label="Cover · concept" width={780} height={460}>
+            <CoverCard family={family}/>
+          </DCArtboard>
+          <DCArtboard id="system" label="Visual system" width={620} height={460}>
+            <SystemCard family={family} aesthetic={tweaks.aesthetic}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="onboarding" title="① Onboarding & auth"
+          subtitle="First-run wizard step 2 (Google OAuth) and the login. The spec calls out gating: until setup is done, all routes redirect here.">
+          <DCArtboard id="login" label="A · Login" width={1100} height={720}><DesktopLogin/></DCArtboard>
+          <DCArtboard id="setup-google" label="B · Setup · connect Google" width={1100} height={780}><SetupGoogle/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="capture" title="② Capture flow (mobile)"
+          subtitle="Home → Camera → Processing → Results. The hot path. ~90% of usage.">
+          <DCArtboard id="home"        label="A · Home" width={390} height={844}><MobileHome family={family}/></DCArtboard>
+          <DCArtboard id="capture-cam" label="B · Camera (landscape)" width={390} height={844}><MobileUploadLandscape/></DCArtboard>
+          <DCArtboard id="capture-portrait" label="B² · Camera (portrait fallback)" width={390} height={844}><MobileUpload orientation="portrait"/></DCArtboard>
+          <DCArtboard id="processing"  label="C · Processing (live SSE)" width={390} height={844}>
+            <MobileProcessing activeStage={tweaks.sseStage}
+              cellProgress={Math.min(15, Math.max(1, (tweaks.sseStage - 4) * 5 + 7))}
+              totalCells={15}/>
+          </DCArtboard>
+          <DCArtboard id="results"     label="D · Results" width={390} height={844}><MobileResults family={family}/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="review" title="③ Review queue"
+          subtitle="Below-threshold events go here. Decision time per item should be under 5 sec.">
+          <DCArtboard id="queue"  label="A · Queue list"  width={390} height={844}><MobileQueue family={family}/></DCArtboard>
+          <DCArtboard id="review" label="B · Review one item" width={390} height={844}><MobileReview family={family}/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="calendar" title="④ Calendar (desktop)"
+          subtitle="Editorial month view — Hearth-flavored, not Google-Calendar-cloned. Color-coded by writer.">
+          <DCArtboard id="cal" label="Editorial month" width={1280} height={800}><DesktopCalendar family={family}/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="admin" title="⑤ Admin"
+          subtitle="Family ↔ ink ↔ Google calendar mappings, plus the provider/threshold settings.">
+          <DCArtboard id="family-admin" label="Family & ink" width={1280} height={800}><AdminFamily family={family}/></DCArtboard>
+          <DCArtboard id="settings"     label="Settings (provider / threshold)" width={1280} height={800}>
+            <AdminSettings provider={tweaks.provider} threshold={tweaks.threshold}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="tv" title="⑥ TV mode — three layouts to pick from"
+          subtitle="LAN-open. Wall-mounted display. Three takes — choose one as v1, others can ship as `?layout=...` variants.">
+          <DCArtboard id="tv-editorial" label="A · Editorial (recommended)" width={1280} height={720}><TVEditorial family={family}/></DCArtboard>
+          <DCArtboard id="tv-minimal"   label="B · Minimal poster" width={1280} height={720}><TVMinimal family={family}/></DCArtboard>
+          <DCArtboard id="tv-dense"     label="C · Info-dense" width={1280} height={720}><TVDense family={family}/></DCArtboard>
+          <DCArtboard id="tv-portrait"  label="D · Portrait variant (Editorial)" width={540} height={960}><TVEditorial family={family} portrait/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="background" title="⑧ Background processing (v2 enhancement)"
+          subtitle="Relaxes the non-dismissible-processing constraint. Real runs take 60–120s — let users walk away. New: MobileStatus inbox + Continue-in-background button + Home banner.">
+          <DCArtboard id="home-v2" label="A · Home (with in-flight banner)" width={390} height={844}><MobileHomeV2 family={family}/></DCArtboard>
+          <DCArtboard id="status" label="B · Uploads (Status inbox)" width={390} height={844}><MobileStatus/></DCArtboard>
+          <DCArtboard id="processing-v2" label="C · Processing + Continue button" width={390} height={844}><MobileProcessingV2/></DCArtboard>
+          <DCArtboard id="home-quiet" label="D · Home (quiescent · muted link)" width={390} height={844}><MobileHomeV2 family={family} inflightCount={0}/></DCArtboard>
+          <DCArtboard id="status-queued" label="E · Uploads · 3 photos queued" width={390} height={844}><MobileStatusQueued/></DCArtboard>
+          <DCArtboard id="capture-sheet" label="F · + New capture sheet" width={390} height={844}><MobileStatusQueued sheetOpen/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="states" title="⑦ States & edge cases"
+          subtitle="Empty state, error state, all-clear state.">
+          <DCArtboard id="empty" label="Empty home" width={390} height={844}><EmptyHome/></DCArtboard>
+          <DCArtboard id="error" label="Error state (token expired)" width={1280} height={500}><ErrorBanner/></DCArtboard>
+        </DCSection>
+
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks" defaultOpen={false}>
+        <TweakSection title="Aesthetic">
+          <TweakRadio
+            value={tweaks.aesthetic}
+            onChange={v => setTweak('aesthetic', v)}
+            options={Object.entries(window.HEARTH_AESTHETICS).map(([k, v]) => ({ value: k, label: v.name }))}
+          />
+          <div style={{ fontSize: 11, opacity: 0.65, marginTop: 6 }}>{window.HEARTH_AESTHETICS[tweaks.aesthetic].blurb}</div>
+        </TweakSection>
+        <TweakSection title="Theme">
+          <TweakRadio
+            value={tweaks.theme}
+            onChange={v => setTweak('theme', v)}
+            options={[{value:'light',label:'Light'},{value:'dark',label:'Dark'},{value:'sepia',label:'Sepia'}]}
+          />
+        </TweakSection>
+        <TweakSection title="Confidence threshold">
+          <TweakSlider value={tweaks.threshold} onChange={v => setTweak('threshold', v)} min={50} max={99} step={1} suffix="%"/>
+          <div style={{ fontSize: 11, opacity: 0.65, marginTop: 4 }}>Above auto-publishes; below queues for review.</div>
+        </TweakSection>
+        <TweakSection title="Vision provider">
+          <TweakSelect
+            value={tweaks.provider}
+            onChange={v => setTweak('provider', v)}
+            options={[
+              {value:'ollama',    label:'Ollama (local) · qwen2.5-vl:7b'},
+              {value:'gemini',    label:'Gemini 2.5 Flash'},
+              {value:'anthropic', label:'Claude Haiku 4.5'},
+            ]}
+          />
+        </TweakSection>
+        <TweakSection title="Processing screen — replay SSE">
+          <TweakSlider value={tweaks.sseStage} onChange={v => setTweak('sseStage', v)} min={0} max={8} step={1}/>
+          <div style={{ fontSize: 11, opacity: 0.65, marginTop: 4 }}>
+            Stage: <strong>{(window.HEARTH_STAGES[tweaks.sseStage] || {}).label}</strong>
+          </div>
+        </TweakSection>
+        <TweakSection title="Family colors">
+          <TweakToggle value={tweaks.elliePink} onChange={v => setTweak('elliePink', v)} label="Ellie = pink (Danielle is red)"/>
+          <div style={{ fontSize: 11, opacity: 0.65, marginTop: 6 }}>
+            Both Danielle &amp; Eliana were marked Red — split them so the VLM can attribute correctly. Confirm or pick a different color for Ellie.
+          </div>
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+// ─── Cover & system cards ────────────────────────────────────────
+function CoverCard({ family }) {
+  return (
+    <div style={{ width: '100%', height: '100%', background: 'var(--bg)',
+      borderRadius: 'var(--radiusLg)', border: '1px solid var(--rule)',
+      padding: 36, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: -60, right: -40, opacity: 0.07 }}>
+        <HearthMark size={420} color="var(--accent)"/>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+        <HearthWordmark size={20}/>
+        <span style={{ flex: 1 }}/>
+        <span style={{ fontFamily: 'var(--fontMono)', fontSize: 11, color: 'var(--fgSoft)', letterSpacing: 1, textTransform: 'uppercase' }}>
+          UI Spec · v0.1 · 2026-04-27
+        </span>
+      </div>
+      <div style={{ position: 'relative' }}>
+        <div style={{ fontFamily: 'var(--fontMono)', fontSize: 11, color: 'var(--accent)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14, fontWeight: 700 }}>
+          The wall calendar, everywhere.
+        </div>
+        <div style={{ fontFamily: 'var(--fontDisplay)', fontSize: 76, lineHeight: '0.95', letterSpacing: -2, color: 'var(--ink)', maxWidth: 600 }}>
+          A bridge from <span style={{ fontStyle: 'italic', color: 'var(--accent)' }}>handwriting</span> on the kitchen wall<br/>to every device in the house.
+        </div>
+        <div style={{ marginTop: 22, color: 'var(--fgSoft)', fontSize: 14, maxWidth: 520, lineHeight: 1.55 }}>
+          Photo &nbsp;→&nbsp; preprocess &nbsp;→&nbsp; per-cell VLM &nbsp;→&nbsp; ink-color attribution &nbsp;→&nbsp; confidence gate &nbsp;→&nbsp; Google Calendar.
+          The whiteboard stays the source of truth; Hearth is the loudspeaker.
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, position: 'relative' }}>
+        {family.map(f => (
+          <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+            borderRadius: 999, background: 'var(--surface)', border: '1px solid var(--rule)', fontSize: 12 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: f.hex }}/>
+            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{f.name}</span>
+            <span style={{ color: 'var(--fgSoft)' }}>{f.label}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SystemCard({ family, aesthetic }) {
+  const a = window.HEARTH_AESTHETICS[aesthetic];
+  return (
+    <div style={{ width: '100%', height: '100%', background: 'var(--bg)',
+      borderRadius: 'var(--radiusLg)', border: '1px solid var(--rule)', padding: 28,
+      display: 'flex', flexDirection: 'column', gap: 18, overflow: 'auto' }}>
+      <div>
+        <div style={{ fontFamily: 'var(--fontMono)', fontSize: 11, color: 'var(--fgSoft)', letterSpacing: 1.5, textTransform: 'uppercase' }}>System · {a.name}</div>
+        <div style={{ fontFamily: 'var(--fontDisplay)', fontSize: 36, lineHeight: 1, letterSpacing: -0.8, color: 'var(--ink)', marginTop: 4 }}>
+          Type, color, ink.
+        </div>
+      </div>
+      <div>
+        <div style={{ fontFamily: 'var(--fontDisplay)', fontSize: 44, lineHeight: 1, letterSpacing: -1 }}>Hearth</div>
+        <div style={{ fontFamily: 'var(--fontDisplay)', fontStyle: 'italic', fontSize: 22, color: 'var(--accent)', marginTop: 4 }}>"a place to gather"</div>
+        <div style={{ fontFamily: 'var(--fontBody)', fontSize: 14, color: 'var(--ink)', marginTop: 10, lineHeight: 1.6, maxWidth: 480 }}>
+          Body text, set in {a.fontBody.split(',')[0].replace(/['"]/g, '')}. Comfortable for review forms and calendar lists; plays nicely against the display serif.
+        </div>
+        <div style={{ fontFamily: 'var(--fontMono)', fontSize: 12, color: 'var(--fgSoft)', marginTop: 10 }}>
+          # mono · 2026-04-27T08:30 · qwen2.5-vl
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {[['Paper','--paper'],['Deep','--paperDeep'],['Ink','--ink'],['Soft','--inkSoft'],['Accent','--accent'],['Warn','--warn'],['Success','--success']].map(([n, v]) => (
+          <div key={n} style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ height: 40, borderRadius: 8, background: `var(${v})`, border: '1px solid var(--rule)' }}/>
+            <div style={{ fontSize: 10, color: 'var(--fgSoft)', marginTop: 4, fontFamily: 'var(--fontMono)' }}>{n}</div>
+          </div>
+        ))}
+      </div>
+      <div>
+        <div style={{ fontSize: 11, color: 'var(--fgSoft)', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, marginBottom: 8 }}>Family ink</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {family.map(f => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
+              borderRadius: 8, background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+              <span style={{ width: 22, height: 22, borderRadius: 6, background: f.hex }}/>
+              <span style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{f.name}</span>
+              <span style={{ fontFamily: 'var(--fontMono)', fontSize: 11, color: 'var(--fgSoft)' }}>{f.hex}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyHome() {
+  return (
+    <PhoneShell>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', padding: '54px 30px 30px', textAlign: 'center', gap: 16 }}>
+        <div style={{ width: 88, height: 88, borderRadius: 22, background: 'var(--accentSoft)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <HearthMark size={52} color="var(--accent)"/>
+        </div>
+        <div style={{ fontFamily: 'var(--fontDisplay)', fontSize: 28, lineHeight: 1.1, color: 'var(--ink)' }}>
+          Nothing on the calendar yet —<br/><span style={{ fontStyle: 'italic', color: 'var(--accent)' }}>let's get started.</span>
+        </div>
+        <div style={{ color: 'var(--fgSoft)', fontSize: 14, lineHeight: 1.5, maxWidth: 280 }}>
+          Snap a photo of the wall calendar. Hearth reads the handwriting and sorts events by who wrote them.
+        </div>
+        <HBtn kind="primary" size="lg" style={{ marginTop: 12 }}>📷 Take a photo</HBtn>
+      </div>
+      <MobileTabBar active="home"/>
+    </PhoneShell>
+  );
+}
+
+function ErrorBanner() {
+  return (
+    <DesktopShell width={1280} height={500}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '14px 24px', background: 'color-mix(in oklab, var(--warn) 12%, transparent)',
+          borderBottom: '1px solid color-mix(in oklab, var(--warn) 30%, transparent)',
+          display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--warn)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>!</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: 'var(--ink)' }}>Google reconnect needed</div>
+            <div style={{ fontSize: 12, color: 'var(--fgSoft)' }}>Your refresh token expired (90-day inactivity rule). New events won't sync until you sign in again.</div>
+          </div>
+          <HBtn kind="primary">Reconnect Google</HBtn>
+        </div>
+        <div style={{ padding: 36, color: 'var(--fgSoft)', fontSize: 13, fontFamily: 'var(--fontMono)' }}>
+          // Banner appears across the top of every authenticated route until the admin reconnects.<br/>
+          // Source: §17 risks → "Google OAuth refresh token expires"
+        </div>
+      </div>
+    </DesktopShell>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
