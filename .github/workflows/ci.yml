@@ -220,10 +220,16 @@ jobs:
           # /data volume mount (the Settings default uses a relative path that
           # resolves to /app/data — unwritable since only /data is chowned to
           # the hearth user).
+          # Disable lifespan steps that reach network or block on a real
+          # external dependency: Ollama isn't running in CI, and we don't
+          # need bootstrap admin / upload recovery to verify /api/health.
           docker run -d --name hearth-ci -p 18080:8080 \
             -e HEARTH_SESSION_SECRET="$SECRET" \
             -e HEARTH_DATABASE_URL='sqlite+aiosqlite:////data/hearth.db' \
             -e HEARTH_DEBUG=false \
+            -e HEARTH_VISION_HEALTH_CHECK_ON_STARTUP=false \
+            -e HEARTH_BOOTSTRAP_ADMIN_ON_STARTUP=false \
+            -e HEARTH_RECOVER_UPLOADS_ON_STARTUP=false \
             "$IMAGE"
           # Health endpoint is anonymous; ready as soon as migrations + lifespan finish.
           READY=0
