@@ -122,6 +122,11 @@ class Settings(BaseSettings):
     # Set HEARTH_VISION_HEALTH_CHECK_ON_STARTUP=false in tests or dev to skip.
     vision_health_check_on_startup: bool = True
 
+    # When True, auto-publish events to Google Calendar inline during the
+    # pipeline run (immediately after persisting each high-confidence event).
+    # Set HEARTH_AUTO_PUBLISH_TO_GCAL=false in tests or dev to disable.
+    auto_publish_to_gcal: bool = True
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
