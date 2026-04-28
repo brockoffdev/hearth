@@ -215,8 +215,14 @@ jobs:
           IMAGE="docker.brockoff.dev/hearth@${DIGEST}"
           docker pull "$IMAGE"
           SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
-          docker run --rm -d --name hearth-ci -p 18080:8080 \
+          # No --rm so a startup crash leaves the container around for `docker
+          # logs` in the failure path.  HEARTH_DATABASE_URL pins SQLite at the
+          # /data volume mount (the Settings default uses a relative path that
+          # resolves to /app/data — unwritable since only /data is chowned to
+          # the hearth user).
+          docker run -d --name hearth-ci -p 18080:8080 \
             -e HEARTH_SESSION_SECRET="$SECRET" \
+            -e HEARTH_DATABASE_URL='sqlite+aiosqlite:////data/hearth.db' \
             -e HEARTH_DEBUG=false \
             "$IMAGE"
           # Health endpoint is anonymous; ready as soon as migrations + lifespan finish.
@@ -226,16 +232,23 @@ jobs:
               READY=1
               break
             fi
+            # Bail early on a confirmed exit so we don't waste 30s.
+            if [ "$(docker inspect -f '{{.State.Running}}' hearth-ci 2>/dev/null)" = "false" ]; then
+              break
+            fi
             sleep 1
           done
           if [ "$READY" != "1" ]; then
             echo "::error::Container did not become ready within 30s"
+            echo "--- docker inspect ---"
+            docker inspect -f 'State: {{.State.Status}}  ExitCode: {{.State.ExitCode}}  Error: {{.State.Error}}' hearth-ci || true
+            echo "--- container logs ---"
             docker logs hearth-ci || true
-            docker stop hearth-ci || true
+            docker rm -f hearth-ci || true
             exit 1
           fi
           curl -sf http://127.0.0.1:18080/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True"
-          docker stop hearth-ci
+          docker rm -f hearth-ci
 
       # ── Export digests for the merge job ──
       - name: Export digest — private
