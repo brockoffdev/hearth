@@ -76,6 +76,8 @@ For production, provide this via a `.env` file, Docker secrets, or your deployme
 
 Set `HEARTH_SESSION_COOKIE_SECURE=true` in production (HTTPS). Default is `false` to allow HTTP in local development.
 
+**Photo uploads:** `HEARTH_MAX_UPLOAD_BYTES` (default `26214400`, i.e. 25 MiB) caps the size of a single photo upload. Larger uploads return 413.
+
 **Fake-pipeline timing (Phase 3 only):** `HEARTH_PIPELINE_STAGE_DELAY_SECONDS` (default `1.5`) and `HEARTH_PIPELINE_CELL_DELAY_SECONDS` (default `0.15`) control the simulated delays between SSE stage events. Phase 4 replaces the fake pipeline with real VLM inference, at which point these settings become irrelevant.
 
 ## Project layout
