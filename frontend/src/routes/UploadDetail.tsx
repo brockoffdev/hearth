@@ -8,9 +8,14 @@ import type { StageUpdate } from '../lib/sseClient';
 import { HEARTH_STAGES } from '../lib/stages';
 import type { StageKey } from '../lib/stages';
 import { formatETA } from '../lib/eta';
+import { listEvents } from '../lib/events';
+import type { Event } from '../lib/events';
 import { HBtn } from '../components/HBtn';
 import { BackChevron } from '../components/BackChevron';
 import { HearthWordmark } from '../components/HearthWordmark';
+import { SectionRule } from '../components/SectionRule';
+import { EventCard } from '../components/EventCard';
+import { MobileTabBar } from '../components/MobileTabBar';
 import { cn } from '../lib/cn';
 import { ApiError } from '../lib/api';
 import styles from './UploadDetail.module.css';
@@ -31,6 +36,11 @@ interface ProcessingState {
   isComplete: boolean;
   isFailed: boolean;
   sseError: string | null;
+}
+
+interface ResultsState {
+  events: Event[];
+  isLoading: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +130,102 @@ function StageIcon({ status }: { status: StageStatus }) {
 }
 
 // ---------------------------------------------------------------------------
+// ResultsView
+// ---------------------------------------------------------------------------
+
+interface ResultsViewProps {
+  events: Event[];
+  isLoading: boolean;
+}
+
+function ResultsView({ events, isLoading }: ResultsViewProps): JSX.Element {
+  const navigate = useNavigate();
+
+  const auto = events.filter((e) => e.status === 'auto_published');
+  const review = events.filter((e) => e.status === 'pending_review');
+  const total = events.length;
+
+  return (
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <BackChevron onClick={() => void navigate('/uploads')} />
+        <HearthWordmark size={20} />
+      </header>
+
+      <div className={styles.resultsTitle}>
+        <p className={styles.doneLabel}>Done</p>
+        {isLoading ? (
+          <h1 className={styles.foundHeading}>Loading events…</h1>
+        ) : (
+          <>
+            <h1 className={styles.foundHeading}>
+              Found <span className={styles.foundAccent}>{total}</span> events.
+            </h1>
+            <p className={styles.foundSubtitle}>
+              <strong className={styles.autoCount}>{auto.length} auto-published</strong>
+              {' · '}
+              <strong className={styles.reviewCount}>{review.length} need review</strong>
+            </p>
+          </>
+        )}
+      </div>
+
+      {!isLoading && total === 0 && (
+        <div className={styles.emptyState}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" stroke="var(--fgSoft)" strokeWidth="1.5" />
+            <path d="M12 8v4m0 4h.01" stroke="var(--fgSoft)" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <p className={styles.emptyText}>
+            Nothing recognizable on the calendar yet — try re-taking the photo with brighter light
+            or a straighter angle?
+          </p>
+          <HBtn kind="primary" onClick={() => void navigate('/upload')}>
+            Re-upload
+          </HBtn>
+        </div>
+      )}
+
+      {!isLoading && auto.length > 0 && (
+        <>
+          <SectionRule label="Auto-published" dotColor="var(--success)" count={auto.length} />
+          <div className={styles.eventList}>
+            {auto.map((event) => (
+              <EventCard key={event.id} event={event} showCellCrop={false} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {!isLoading && review.length > 0 && (
+        <>
+          <SectionRule
+            label="Awaiting review"
+            dotColor="var(--warn)"
+            count={review.length}
+            marginTop={12}
+          />
+          <div className={styles.eventList}>
+            {review.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                showCellCrop
+                onClick={() => void navigate(`/queue/${event.id}`)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className={styles.resultsBottom} />
+
+      <MobileTabBar active="uploads" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -137,6 +243,11 @@ export function UploadDetail(): JSX.Element {
     isComplete: false,
     isFailed: false,
     sseError: null,
+  });
+
+  const [results, setResults] = useState<ResultsState>({
+    events: [],
+    isLoading: false,
   });
 
   const parsedId = rawId !== undefined ? parseInt(rawId, 10) : NaN;
@@ -222,6 +333,31 @@ export function UploadDetail(): JSX.Element {
     };
   }, [parsedId, isValidId]);
 
+  // Fetch events once the upload reaches the completed state
+  useEffect(() => {
+    if (!state.isComplete || !isValidId) return;
+
+    let cancelled = false;
+    setResults({ events: [], isLoading: true });
+
+    void (async () => {
+      try {
+        const data = await listEvents({ upload_id: parsedId });
+        if (!cancelled) {
+          setResults({ events: data.items, isLoading: false });
+        }
+      } catch {
+        if (!cancelled) {
+          setResults({ events: [], isLoading: false });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.isComplete, parsedId, isValidId]);
+
   // ── Render guards ──────────────────────────────────────────────────────────
 
   if (!isValidId) {
@@ -291,37 +427,14 @@ export function UploadDetail(): JSX.Element {
     );
   }
 
-  // ── Terminal: complete ─────────────────────────────────────────────────────
+  // ── Terminal: complete → Results view ─────────────────────────────────────
 
   if (state.isComplete) {
     return (
-      <div className={styles.page}>
-        <header className={styles.header}>
-          <HearthWordmark size={20} />
-        </header>
-        <div className={styles.completeView}>
-          <div className={styles.terminalIcon} aria-label="Complete">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="11" fill="var(--success)" opacity="0.15" />
-              <circle cx="12" cy="12" r="10" stroke="var(--success)" strokeWidth="1.5" />
-              <path
-                d="M7 12l3.5 3.5L17 9"
-                stroke="var(--success)"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <p className={styles.completeTitle}>Done!</p>
-          <p className={styles.completeHint}>
-            Processing complete — your calendar has been read.
-          </p>
-          <HBtn kind="primary" onClick={() => void navigate('/')}>
-            Back home
-          </HBtn>
-        </div>
-      </div>
+      <ResultsView
+        events={results.events}
+        isLoading={results.isLoading}
+      />
     );
   }
 

@@ -3,6 +3,7 @@ import {
   screen,
   waitFor,
   act,
+  fireEvent,
 } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -11,6 +12,8 @@ import { AuthProvider } from '../auth/AuthProvider';
 import { UploadDetail } from './UploadDetail';
 import type { UploadSummary } from '../lib/uploads';
 import { HEARTH_STAGES } from '../lib/stages';
+import type { Event as CalEvent, EventList } from '../lib/events';
+import * as eventsModule from '../lib/events';
 
 // ---------------------------------------------------------------------------
 // MockEventSource
@@ -80,11 +83,56 @@ function renderDetail(id: string | number = 7) {
           <Routes>
             <Route path="/uploads/:id" element={<UploadDetail />} />
             <Route path="/uploads" element={<div data-testid="uploads-page">Uploads</div>} />
+            <Route path="/upload" element={<div data-testid="upload-page">Upload</div>} />
+            <Route path="/queue/:id" element={<div data-testid="queue-page">Queue</div>} />
             <Route path="/" element={<div data-testid="home-page">Home</div>} />
           </Routes>
         </AuthProvider>
       </ThemeProvider>
     </MemoryRouter>,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Event factory helpers
+// ---------------------------------------------------------------------------
+
+function makeEvent(overrides: Partial<CalEvent> = {}): CalEvent {
+  return {
+    id: 1,
+    upload_id: 7,
+    family_member_id: null,
+    family_member_name: 'Bryant',
+    family_member_color_hex: '#2E5BA8',
+    title: 'Soccer practice',
+    start_dt: '2026-04-27T15:00:00Z',
+    end_dt: '2026-04-27T16:00:00Z',
+    all_day: false,
+    location: null,
+    notes: null,
+    confidence: 0.92,
+    status: 'pending_review',
+    google_event_id: null,
+    cell_crop_path: null,
+    has_cell_crop: false,
+    raw_vlm_json: null,
+    created_at: '2026-04-27T10:00:00Z',
+    updated_at: '2026-04-27T10:00:00Z',
+    published_at: null,
+    ...overrides,
+  };
+}
+
+function makeEventList(items: CalEvent[]): EventList {
+  return { items, total: items.length };
+}
+
+/** Stub fetch for upload + events. */
+function setupCompletedUploadWithEvents(events: CalEvent[]) {
+  vi.spyOn(eventsModule, 'listEvents').mockResolvedValue(makeEventList(events));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(makeFetchResponse(200, makeUploadResponse({ status: 'completed' }))),
   );
 }
 
@@ -100,6 +148,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 // ---------------------------------------------------------------------------
@@ -294,7 +343,8 @@ describe('UploadDetail — processing state', () => {
 });
 
 describe('UploadDetail — done event', () => {
-  it('transitions to Done view with Back home button', async () => {
+  it('transitions to Results view when done event arrives', async () => {
+    vi.spyOn(eventsModule, 'listEvents').mockResolvedValue(makeEventList([]));
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -318,13 +368,12 @@ describe('UploadDetail — done event', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/done/i)).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: /back home/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/found/i)).toBeInTheDocument();
     });
   });
 
   it('closes the EventSource when done event arrives', async () => {
+    vi.spyOn(eventsModule, 'listEvents').mockResolvedValue(makeEventList([]));
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -353,7 +402,8 @@ describe('UploadDetail — done event', () => {
 });
 
 describe('UploadDetail — already-completed upload', () => {
-  it('shows Done view immediately without SSE subscription', async () => {
+  it('shows Results view immediately without SSE subscription', async () => {
+    vi.spyOn(eventsModule, 'listEvents').mockResolvedValue(makeEventList([]));
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -364,10 +414,7 @@ describe('UploadDetail — already-completed upload', () => {
     renderDetail(7);
 
     await waitFor(() => {
-      expect(screen.getByText(/processing complete/i)).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: /back home/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/found/i)).toBeInTheDocument();
     });
 
     // No SSE connection should have been opened
@@ -580,6 +627,7 @@ describe('UploadDetail — Continue in background', () => {
   });
 
   it('Continue in background button is hidden in terminal Done state', async () => {
+    vi.spyOn(eventsModule, 'listEvents').mockResolvedValue(makeEventList([]));
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -590,7 +638,7 @@ describe('UploadDetail — Continue in background', () => {
     renderDetail(7);
 
     await waitFor(() => {
-      expect(screen.getByText(/processing complete/i)).toBeInTheDocument();
+      expect(screen.getByText(/found/i)).toBeInTheDocument();
     });
 
     expect(
@@ -653,6 +701,94 @@ describe('UploadDetail — BackChevron navigation', () => {
       // /uploads route is not registered in renderDetail's test router —
       // verify we left the detail page (component unmounted)
       expect(screen.queryByRole('button', { name: /go back/i })).toBeNull();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Results view tests
+// ---------------------------------------------------------------------------
+
+describe('UploadDetail — Results view', () => {
+  it('test_results_view_shows_event_counts_and_sections', async () => {
+    const autoEvents = [
+      makeEvent({ id: 1, status: 'auto_published', title: 'Dentist' }),
+      makeEvent({ id: 2, status: 'auto_published', title: 'School play' }),
+      makeEvent({ id: 3, status: 'auto_published', title: 'Date night' }),
+    ];
+    const reviewEvents = [
+      makeEvent({ id: 4, status: 'pending_review', title: 'Soccer practice' }),
+      makeEvent({ id: 5, status: 'pending_review', title: 'Piano lesson' }),
+    ];
+    setupCompletedUploadWithEvents([...autoEvents, ...reviewEvents]);
+
+    renderDetail(7);
+
+    await waitFor(() => {
+      expect(screen.getByText(/found/i)).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      // H1 has "5" (total) as accent-colored span
+      expect(screen.getByText('5')).toBeInTheDocument();
+      // subtitle counts
+      expect(screen.getByText(/3 auto-published/i)).toBeInTheDocument();
+      expect(screen.getByText(/2 need review/i)).toBeInTheDocument();
+      // both section headers visible via SectionRule label
+      expect(screen.getByText('Auto-published')).toBeInTheDocument();
+      expect(screen.getByText('Awaiting review')).toBeInTheDocument();
+      // 5 event titles rendered
+      expect(screen.getByText('Dentist')).toBeInTheDocument();
+      expect(screen.getByText('Soccer practice')).toBeInTheDocument();
+    });
+  });
+
+  it('test_results_view_only_shows_section_with_events', async () => {
+    const autoEvents = [
+      makeEvent({ id: 1, status: 'auto_published', title: 'Dentist' }),
+      makeEvent({ id: 2, status: 'auto_published', title: 'School play' }),
+    ];
+    setupCompletedUploadWithEvents(autoEvents);
+
+    renderDetail(7);
+
+    await waitFor(() => {
+      expect(screen.getByText('Auto-published')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Awaiting review')).toBeNull();
+  });
+
+  it('test_results_view_empty_state', async () => {
+    setupCompletedUploadWithEvents([]);
+
+    renderDetail(7);
+
+    await waitFor(() => {
+      expect(screen.getByText(/nothing recognizable/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /re-upload/i })).toBeInTheDocument();
+  });
+
+  it('test_results_view_review_card_navigates_on_tap', async () => {
+    const reviewEvent = makeEvent({ id: 99, status: 'pending_review', title: 'Soccer practice' });
+    setupCompletedUploadWithEvents([reviewEvent]);
+
+    renderDetail(7);
+
+    await waitFor(() => {
+      expect(screen.getByText('Soccer practice')).toBeInTheDocument();
+    });
+
+    // The review card is a button — find by the event title text within it
+    const card = screen.getAllByRole('button').find(
+      (el) => el.textContent?.includes('Soccer practice'),
+    )!;
+    act(() => fireEvent.click(card));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('queue-page')).toBeInTheDocument();
     });
   });
 });
