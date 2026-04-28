@@ -7,6 +7,7 @@ import { SetupGoogle } from './routes/SetupGoogle';
 import { SetupFamily } from './routes/SetupFamily';
 import { Upload } from './routes/Upload';
 import { UploadDetail } from './routes/UploadDetail';
+import { Status } from './routes/Status';
 import { ReviewPlaceholder } from './routes/ReviewPlaceholder';
 import { CalendarPlaceholder } from './routes/CalendarPlaceholder';
 import { RequireAuth } from './auth/RequireAuth';
@@ -40,6 +41,7 @@ export function App() {
         <Route path="/setup/google" element={<SetupGoogle />} />
         <Route path="/setup/family" element={<SetupFamily />} />
         <Route path="/upload" element={<Upload />} />
+        <Route path="/uploads" element={<Status />} />
         <Route path="/uploads/:id" element={<UploadDetail />} />
         <Route path="/review" element={<ReviewPlaceholder />} />
         <Route path="/calendar" element={<CalendarPlaceholder />} />
