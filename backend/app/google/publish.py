@@ -27,6 +27,7 @@ from backend.app.google.calendar_client import (
     insert_event,
     patch_event,
 )
+from backend.app.google.health_state import mark_oauth_broken
 
 # Settings keys — must match api/google.py
 _KEY_CLIENT_ID = "google_oauth_client_id"
@@ -136,6 +137,7 @@ async def _resolve_credentials(
     try:
         creds, was_refreshed = await credentials_for(token_row, client_id, client_secret)
     except RefreshError as exc:
+        await mark_oauth_broken(session, str(exc))
         raise InvalidGrantError(str(exc)) from exc
 
     if was_refreshed:

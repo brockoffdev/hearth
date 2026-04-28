@@ -23,16 +23,17 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.auth.dependencies import require_admin
+from backend.app.auth.dependencies import require_admin, require_user
 from backend.app.config import Settings, get_settings
 from backend.app.db.base import get_db
-from backend.app.db.models import FamilyMember, OauthToken, Setting
+from backend.app.db.models import FamilyMember, OauthToken, Setting, User
 from backend.app.google.calendar_client import (
     create_calendar,
     credentials_for,
     expiry_to_datetime,
     list_calendars,
 )
+from backend.app.google.health_state import clear_oauth_broken, get_oauth_health
 from backend.app.google.oauth_client import build_flow, fetch_token, get_authorization_url
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,12 @@ class CreateCalendarRequest(BaseModel):
     summary: str
 
     model_config = {"str_min_length": 1}
+
+
+class GoogleHealthResponse(BaseModel):
+    connected: bool
+    broken_reason: str | None = None
+    broken_at: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +285,9 @@ async def oauth_callback(
     await _upsert_setting(db, _KEY_PENDING_STATE, "")
     await db.commit()
 
+    # Successful re-auth clears any prior broken-token flag.
+    await clear_oauth_broken(db)
+
     return RedirectResponse(url=f"{frontend_base}?status=ok", status_code=302)
 
 
@@ -347,4 +357,22 @@ async def create_google_calendar(
     return GoogleCalendarResponse(
         id=result["id"],
         summary=result["summary"],
+    )
+
+
+@router.get("/health", response_model=GoogleHealthResponse)
+async def google_health(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_user),
+) -> GoogleHealthResponse:
+    """Return the current Google OAuth health state.
+
+    Authenticated but not admin-gated — all users need to know when
+    auto-publish is broken.
+    """
+    health = await get_oauth_health(db)
+    return GoogleHealthResponse(
+        connected=bool(health["connected"]),
+        broken_reason=health["broken_reason"] if isinstance(health["broken_reason"], str) else None,
+        broken_at=health["broken_at"] if isinstance(health["broken_at"], str) else None,
     )

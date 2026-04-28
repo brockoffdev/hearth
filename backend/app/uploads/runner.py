@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.config import Settings, get_settings
 from backend.app.db.models import Event, FamilyMember, PipelineStageDuration, Upload
+from backend.app.google.health_state import mark_oauth_broken
 from backend.app.google.publish import (
     GcalError,
     InvalidGrantError,
@@ -154,6 +155,7 @@ async def persist_and_maybe_publish(
                         exc,
                     )
                     publish_state["oauth_broken"] = True
+                    await mark_oauth_broken(db, str(exc))
                     await _demote_to_pending_review(db, event_id, "OAuth token invalid")
                 except (NoOauthError, NoCalendarError, GcalError) as exc:
                     logger.warning("auto-publish: %s for event=%d", exc, event_id)
