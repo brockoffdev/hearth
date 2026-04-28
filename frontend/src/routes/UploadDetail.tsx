@@ -7,7 +7,9 @@ import { subscribeUploadEvents } from '../lib/sseClient';
 import type { StageUpdate } from '../lib/sseClient';
 import { HEARTH_STAGES } from '../lib/stages';
 import type { StageKey } from '../lib/stages';
+import { formatETA } from '../lib/eta';
 import { HBtn } from '../components/HBtn';
+import { BackChevron } from '../components/BackChevron';
 import { HearthWordmark } from '../components/HearthWordmark';
 import { cn } from '../lib/cn';
 import { ApiError } from '../lib/api';
@@ -24,6 +26,8 @@ interface ProcessingState {
   loadError: string | null;
   currentStage: StageKey | null;
   cellProgress: { cell: number; total: number } | null;
+  completedStages: string[];
+  remainingSeconds: number | null;
   isComplete: boolean;
   isFailed: boolean;
   sseError: string | null;
@@ -33,26 +37,32 @@ interface ProcessingState {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Returns the 0-based index of a stage key in HEARTH_STAGES, or -1. */
-function stageIndex(key: StageKey): number {
-  return HEARTH_STAGES.findIndex((s) => s.key === key);
-}
-
-/** Derive status for each stage given the current active stage. */
-function getStageStatus(key: StageKey, currentStage: StageKey | null): StageStatus {
-  if (currentStage === null) return 'upcoming';
-  const current = stageIndex(currentStage);
-  const idx = stageIndex(key);
-  if (idx < current) return 'done';
-  if (idx === current) return 'active';
+/** Derive status for each stage given completed_stages + current active stage. */
+function getStageStatus(
+  key: string,
+  currentStage: StageKey | null,
+  completedStages: string[],
+): StageStatus {
+  if (completedStages.includes(key)) return 'done';
+  if (key === currentStage) return 'active';
   return 'upcoming';
 }
 
-/** Count of completed + active stages (for "X of 10" header badge). */
-function progressCount(currentStage: StageKey | null): number {
-  if (currentStage === null) return 0;
-  // active stage counts as 1, all done stages count too
-  return stageIndex(currentStage) + 1;
+/** Count of completed stages for the "X of 10" header badge. */
+function progressCount(
+  currentStage: StageKey | null,
+  completedStages: string[],
+): number {
+  const doneCount = completedStages.filter((k) =>
+    HEARTH_STAGES.some((s) => s.key === k),
+  ).length;
+  // If currentStage is a real processing stage, count it as 1 active step
+  const isActiveRealStage =
+    currentStage !== null &&
+    currentStage !== 'queued' &&
+    currentStage !== 'done' &&
+    !completedStages.includes(currentStage);
+  return doneCount + (isActiveRealStage ? 1 : 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +132,8 @@ export function UploadDetail(): JSX.Element {
     loadError: null,
     currentStage: null,
     cellProgress: null,
+    completedStages: [],
+    remainingSeconds: null,
     isComplete: false,
     isFailed: false,
     sseError: null,
@@ -178,6 +190,14 @@ export function UploadDetail(): JSX.Element {
               currentStage: update.stage,
               cellProgress:
                 update.progress !== null ? update.progress : prev.cellProgress,
+              completedStages:
+                update.completed_stages !== undefined
+                  ? update.completed_stages
+                  : prev.completedStages,
+              remainingSeconds:
+                update.remaining_seconds !== undefined
+                  ? update.remaining_seconds
+                  : prev.remainingSeconds,
             }));
           },
           onError: () => {
@@ -306,19 +326,40 @@ export function UploadDetail(): JSX.Element {
 
   // ── Processing view ────────────────────────────────────────────────────────
 
-  const count = progressCount(state.currentStage);
+  const count = progressCount(state.currentStage, state.completedStages);
   // All stages except 'done' are shown in the checklist (9 processing stages + done = 10 total)
   const displayStages = HEARTH_STAGES;
+
+  // Queued state: currentStage is 'queued', all real stages are upcoming
+  const isQueued = state.currentStage === 'queued';
+
+  // Subtitle copy differs for queued vs processing
+  const subtitleNode = isQueued ? (
+    <p className={styles.subtitle}>
+      <strong>{formatETA(state.remainingSeconds)}</strong> total · waiting in queue
+    </p>
+  ) : (
+    <p className={styles.subtitle}>
+      <strong>{formatETA(state.remainingSeconds)}</strong> remaining · we&apos;ll let you know when it&apos;s done.
+    </p>
+  );
 
   return (
     <div className={styles.page}>
       {/* Header */}
       <header className={styles.header}>
-        <HearthWordmark size={20} />
+        <BackChevron onClick={() => void navigate('/uploads')} />
+        <span className={styles.headerMeta}>Upload #{parsedId} · started {state.upload?.thumbLabel ?? '…'}</span>
         <span className={styles.progressBadge} aria-live="polite">
           {count > 0 ? `${count} of 10` : 'Starting…'}
         </span>
       </header>
+
+      {/* Title block */}
+      <div className={styles.titleBlock}>
+        <h1 className={styles.titleHeading}>Reading your<br />wall calendar…</h1>
+        {subtitleNode}
+      </div>
 
       {/* Photo thumbnail */}
       {state.upload && (
@@ -331,11 +372,6 @@ export function UploadDetail(): JSX.Element {
         </div>
       )}
 
-      {/* Caution text */}
-      <p className={styles.cautionText}>
-        Don&apos;t close this window — your photo is still being processed.
-      </p>
-
       {/* SSE error banner */}
       {state.sseError && (
         <div className={styles.sseErrorBanner} role="alert">
@@ -346,7 +382,10 @@ export function UploadDetail(): JSX.Element {
       {/* Stage checklist */}
       <ol className={styles.stageList} aria-label="Processing stages">
         {displayStages.map((stage) => {
-          const status = getStageStatus(stage.key, state.currentStage);
+          // Skip 'done' sentinel in checklist when queued (all are upcoming)
+          const status = isQueued
+            ? 'upcoming'
+            : getStageStatus(stage.key, state.currentStage, state.completedStages);
 
           // For the active cell_progress stage, replace hint with dynamic text
           const hintText =
@@ -391,6 +430,21 @@ export function UploadDetail(): JSX.Element {
           );
         })}
       </ol>
+
+      {/* Sticky bottom bar — only during active processing/queued */}
+      <div className={styles.stickyBottom}>
+        <HBtn
+          kind="primary"
+          size="lg"
+          className={styles.continueButton}
+          onClick={() => void navigate('/uploads')}
+        >
+          Continue in background
+        </HBtn>
+        <p className={styles.continueExplain}>
+          Keeps running on the server. Check back from Uploads.
+        </p>
+      </div>
     </div>
   );
 }

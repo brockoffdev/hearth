@@ -7,3 +7,8 @@
   justify-content: center;
   flex-shrink: 0;
 }
+
+.clickable {
+  cursor: pointer;
+  padding: 0;
+}
