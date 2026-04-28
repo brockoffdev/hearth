@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { JSX, FormEvent } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { HBtn } from '../components/HBtn';
+import { Spinner } from '../components/Spinner';
 import {
   listUsers,
   createUser,
@@ -289,7 +290,15 @@ export function AdminUsers(): JSX.Element {
       .finally(() => setLoading(false));
   }, [isAdmin]);
 
-  if (state.status === 'authenticated' && state.user.role !== 'admin') {
+  if (state.status === 'loading') {
+    return (
+      <div className={styles.page} role="status" aria-live="polite">
+        <Spinner size={20} />
+      </div>
+    );
+  }
+
+  if (state.status !== 'authenticated' || state.user.role !== 'admin') {
     return <ForbiddenView />;
   }
 

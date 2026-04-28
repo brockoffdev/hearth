@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { HBtn } from '../components/HBtn';
+import { Spinner } from '../components/Spinner';
 import { getAdminSettings, patchAdminSettings } from '../lib/adminSettings';
 import type { AdminSettings, AdminSettingsPatch } from '../lib/adminSettings';
 import styles from './AdminSettings.module.css';
@@ -67,7 +68,15 @@ export function AdminSettings(): JSX.Element {
       .finally(() => setLoading(false));
   }, [isAdmin]);
 
-  if (state.status === 'authenticated' && state.user.role !== 'admin') {
+  if (state.status === 'loading') {
+    return (
+      <div className={styles.page} role="status" aria-live="polite">
+        <Spinner size={20} />
+      </div>
+    );
+  }
+
+  if (state.status !== 'authenticated' || state.user.role !== 'admin') {
     return <ForbiddenView />;
   }
 

@@ -14,10 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.auth.dependencies import require_admin
-from backend.app.config import Settings, get_settings
+from backend.app.config_overrides import get_effective_settings
 from backend.app.db.base import get_db
 from backend.app.db.models import FamilyMember
-from backend.app.vision import get_vision_provider
+from backend.app.vision import get_effective_vision_provider
 
 router = APIRouter()
 
@@ -94,21 +94,28 @@ class VisionHealthResponse(BaseModel):
 
 @router.get("/vision/health", response_model=VisionHealthResponse)
 async def vision_health(
-    settings: Settings = Depends(get_settings),
+    db: AsyncSession = Depends(get_db),
     _admin: object = Depends(require_admin),
 ) -> VisionHealthResponse:
     """Probe the configured VisionProvider and report liveness.
 
     Returns 200 in all cases (including failures) so the caller can inspect
     the ``healthy`` flag and ``error`` field without catching HTTP errors.
+
+    Resolves provider/model from DB overrides (admin /admin/settings) so the
+    probe reflects the *currently effective* configuration, not the env defaults.
     """
+    effective = await get_effective_settings(db)
+    provider_key = effective["vision_provider"]
+    model = effective["vision_model"]
+
     try:
-        provider = get_vision_provider(settings)
+        provider = await get_effective_vision_provider(db)
     except (ValueError, NotImplementedError) as exc:
         return VisionHealthResponse(
-            provider=settings.vision_provider,
-            model=settings.vision_model,
-            name=settings.vision_provider,
+            provider=provider_key,
+            model=model,
+            name=provider_key,
             healthy=False,
             error=str(exc),
         )
@@ -124,8 +131,8 @@ async def vision_health(
         error = f"health check raised: {exc}"
 
     return VisionHealthResponse(
-        provider=settings.vision_provider,
-        model=settings.vision_model,
+        provider=provider_key,
+        model=model,
         name=provider.name,
         healthy=healthy,
         error=error,

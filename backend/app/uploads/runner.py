@@ -375,11 +375,18 @@ async def run_pipeline_for_upload(
                     if stage_event.stage == "done":
                         upload.status = "completed"
                         upload.finished_at = datetime.now(UTC)
-                        upload.provider = (
-                            settings.vision_provider
-                            if settings.use_real_pipeline
-                            else "fake-pipeline-phase-3p5"
-                        )
+                        if settings.use_real_pipeline:
+                            # Resolve overrides at completion time so the
+                            # provenance string matches the provider that
+                            # actually ran (admin may have changed providers
+                            # since this upload started).
+                            effective = await get_effective_settings(session)
+                            upload.provider = (
+                                f"{effective['vision_provider']}:"
+                                f"{effective['vision_model']}"
+                            )
+                        else:
+                            upload.provider = "fake-pipeline-phase-3p5"
 
                     await session.commit()
 
