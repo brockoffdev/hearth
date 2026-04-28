@@ -117,20 +117,29 @@ async def test_post_upload_creates_row_and_stores_file(
     assert resp.status_code == 201
     body = resp.json()
     assert "id" in body
-    assert body["status"] == "queued"
+    # id is now a string (API contract: stringified int)
+    assert isinstance(body["id"], str)
+    # A newly-created upload has status='queued' on the row, but the API maps
+    # queued → 'processing' (queued is a sub-state of processing in the API shape).
+    assert body["status"] == "processing"
     assert body["image_path"].startswith("uploads/")
     assert body["uploaded_at"]  # ISO string, non-empty
     assert body["url"] == f"/api/uploads/{body['id']}/photo"
+    # New Phase 3.5 fields present.
+    assert body["thumbLabel"]
+    assert "startedAt" in body
+    assert body["current_stage"] is None  # queued row has no current_stage set yet
+    assert body["completed_stages"] == []
 
     # File must exist on disk.
     disk_path = settings.data_dir / body["image_path"]
     assert disk_path.exists()
     assert disk_path.read_bytes() == _FAKE_JPEG_BYTES
 
-    # DB row must exist.
+    # DB row must exist with queued status.
     factory = get_session_factory(db_engine)
     async with factory() as session:
-        result = await session.execute(select(Upload).where(Upload.id == body["id"]))
+        result = await session.execute(select(Upload).where(Upload.id == int(body["id"])))
         row = result.scalar_one_or_none()
     assert row is not None
     assert row.status == "queued"
@@ -188,7 +197,8 @@ async def test_post_upload_assigns_user_id_to_current_user(
         resp = await ac.post("/api/uploads", files=_photo_payload())
 
     assert resp.status_code == 201
-    upload_id = resp.json()["id"]
+    # id is now a string; convert to int for DB lookup.
+    upload_id = int(resp.json()["id"])
 
     async with factory() as session:
         result = await session.execute(select(Upload).where(Upload.id == upload_id))
@@ -213,11 +223,11 @@ async def test_get_uploads_lists_users_uploads_desc(
     async with bootstrapped_client as ac:
         await _login_admin(ac)
 
-        ids: list[int] = []
+        ids: list[str] = []
         for _ in range(3):
             r = await ac.post("/api/uploads", files=_photo_payload())
             assert r.status_code == 201
-            ids.append(r.json()["id"])
+            ids.append(r.json()["id"])  # string ids
 
         resp = await ac.get("/api/uploads")
 
@@ -227,6 +237,11 @@ async def test_get_uploads_lists_users_uploads_desc(
     returned_ids = [item["id"] for item in body]
     # Most recently created should come first.
     assert returned_ids == list(reversed(ids))
+    # Verify new Phase 3.5 camelCase fields are present on list items.
+    for item in body:
+        assert "thumbLabel" in item
+        assert "status" in item
+        assert item["status"] in ("processing", "completed", "failed")
 
 
 # ---------------------------------------------------------------------------
@@ -241,14 +256,25 @@ async def test_get_upload_returns_metadata(
         await _login_admin(ac)
         post_resp = await ac.post("/api/uploads", files=_photo_payload())
         assert post_resp.status_code == 201
-        upload_id = post_resp.json()["id"]
+        upload_id = post_resp.json()["id"]  # string
 
         get_resp = await ac.get(f"/api/uploads/{upload_id}")
 
     assert get_resp.status_code == 200
     body = get_resp.json()
+    # id is stringified in the API response.
     assert body["id"] == upload_id
-    assert body["status"] == "queued"
+    # queued rows map to 'processing' in the API shape.
+    assert body["status"] == "processing"
+    # New Phase 3.5 fields.
+    assert body["thumbLabel"]
+    assert "startedAt" in body
+    assert "current_stage" in body
+    assert "completed_stages" in body
+    # Legacy fields still present for Phase 3 frontend.
+    assert body["url"]
+    assert body["uploaded_at"]
+    assert body["image_path"]
 
 
 async def test_get_upload_404_for_unknown_id(
@@ -270,7 +296,7 @@ async def test_get_upload_403_when_other_users_upload(
         await _login_admin(ac)
         post_resp = await ac.post("/api/uploads", files=_photo_payload())
         assert post_resp.status_code == 201
-        upload_id = post_resp.json()["id"]
+        upload_id = post_resp.json()["id"]  # string
 
         # Switch to User B.
         await ac.post("/api/auth/logout")
@@ -292,7 +318,7 @@ async def test_get_photo_returns_bytes_with_correct_content_type(
         await _login_admin(ac)
         post_resp = await ac.post("/api/uploads", files=_photo_payload())
         assert post_resp.status_code == 201
-        upload_id = post_resp.json()["id"]
+        upload_id = post_resp.json()["id"]  # string
 
         photo_resp = await ac.get(f"/api/uploads/{upload_id}/photo")
 
@@ -313,7 +339,7 @@ async def test_get_photo_404_when_file_missing(
         post_resp = await ac.post("/api/uploads", files=_photo_payload())
         assert post_resp.status_code == 201
         body = post_resp.json()
-        upload_id = body["id"]
+        upload_id = body["id"]  # string
 
         # Delete the file from disk.
         disk_path = settings.data_dir / body["image_path"]
@@ -322,3 +348,73 @@ async def test_get_photo_404_when_file_missing(
         photo_resp = await ac.get(f"/api/uploads/{upload_id}/photo")
 
     assert photo_resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.5: new shape + legacy field tests
+# ---------------------------------------------------------------------------
+
+
+async def test_get_upload_new_fields_present_on_queued_row(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """A just-uploaded row returns status='processing', completedStages=[], legacy fields."""
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        post_resp = await ac.post("/api/uploads", files=_photo_payload())
+        assert post_resp.status_code == 201
+        upload_id = post_resp.json()["id"]
+
+        get_resp = await ac.get(f"/api/uploads/{upload_id}")
+
+    assert get_resp.status_code == 200
+    body = get_resp.json()
+
+    # API maps queued → processing.
+    assert body["status"] == "processing"
+    # id is stringified.
+    assert body["id"] == upload_id
+    assert isinstance(body["id"], str)
+
+    # New fields.
+    assert "thumbLabel" in body
+    assert body["thumbLabel"]  # non-empty string
+    assert "startedAt" in body
+    assert body["startedAt"] is not None  # processing row has startedAt
+
+    # Processing-only fields present (snake_case — no alias on these).
+    assert body["completed_stages"] == []
+    assert body["current_stage"] is None  # no stage set yet on queued row
+
+    # Legacy fields for Phase 3 frontend.
+    assert body["url"] == f"/api/uploads/{upload_id}/photo"
+    assert body["image_path"].startswith("uploads/")
+    assert body["uploaded_at"]  # ISO string
+
+
+async def test_get_upload_camelcase_aliases_serialize_correctly(
+    bootstrapped_client: AsyncClient,
+) -> None:
+    """Response uses camelCase field names per the design TS shape."""
+    async with bootstrapped_client as ac:
+        await _login_admin(ac)
+        post_resp = await ac.post("/api/uploads", files=_photo_payload())
+        assert post_resp.status_code == 201
+        upload_id = post_resp.json()["id"]
+
+        get_resp = await ac.get(f"/api/uploads/{upload_id}")
+
+    body = get_resp.json()
+    # camelCase aliases from the Pydantic model / TS shape.
+    assert "thumbLabel" in body
+    assert "startedAt" in body
+    assert "finishedAt" in body
+    # snake_case fields kept as-is (match the TS shape).
+    assert "current_stage" in body
+    assert "completed_stages" in body
+    assert "remaining_seconds" in body
+    # camelCase aliases.
+    assert "cellProgress" in body
+    assert "totalCells" in body
+    assert "queuedBehind" in body
+    assert "durationSec" in body
