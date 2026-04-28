@@ -9,6 +9,7 @@ from .family import router as family_router
 from .google import router as google_router
 from .health import router as health_router
 from .setup import router as setup_router
+from .tv import router as tv_router
 from .uploads import router as uploads_router
 
 router = APIRouter()
@@ -22,3 +23,4 @@ router.include_router(setup_router, prefix="/setup", tags=["setup"])
 router.include_router(uploads_router, prefix="/uploads", tags=["uploads"])
 router.include_router(events_router, prefix="/events", tags=["events"])
 router.include_router(family_router, prefix="/family", tags=["family"])
+router.include_router(tv_router, prefix="/tv", tags=["tv"])

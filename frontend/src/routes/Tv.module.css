@@ -1,0 +1,568 @@
+/* TV mode — dark editorial palette, hardcoded independent of user theme */
+/* Background: #0F0D0B  Text: #F4EEE3  Accent: #D97A2C */
+
+.shell {
+  position: fixed;
+  inset: 0;
+  background: #0F0D0B;
+  color: #F4EEE3;
+  font-family: var(--fontBody, system-ui, sans-serif);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Heartbeat dot ───────────────────────────────────────────── */
+.heartbeat {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  z-index: 10;
+  transition: background 0.4s, box-shadow 0.4s, opacity 0.4s;
+}
+
+.heartbeatFresh {
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+  opacity: 0.75;
+}
+
+.heartbeatStale {
+  background: #ef4444;
+  box-shadow: none;
+  opacity: 0.45;
+}
+
+/* ── Page container + transition ────────────────────────────── */
+.pageWrap {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.4s ease;
+}
+
+.pageVisible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pageHidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Shared masthead ─────────────────────────────────────────── */
+.masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 36px 56px 16px;
+  border-bottom: 1.5px solid rgba(244,238,227,.18);
+}
+
+.mastheadLeft {
+  display: flex;
+  flex-direction: column;
+}
+
+.tagline {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0.55;
+  text-transform: uppercase;
+}
+
+.bigDate {
+  font-family: var(--fontDisplay, Georgia, serif);
+  font-size: 64px;
+  line-height: 0.95;
+  letter-spacing: -2px;
+  margin-top: 6px;
+}
+
+.bigDateItalic {
+  font-style: italic;
+}
+
+.clock {
+  font-family: var(--fontDisplay, Georgia, serif);
+  font-size: 72px;
+  line-height: 1;
+  letter-spacing: -3px;
+  text-align: right;
+}
+
+.clockPeriod {
+  font-size: 28px;
+  opacity: 0.5;
+  margin-left: 6px;
+}
+
+/* ── Page indicator footer ───────────────────────────────────── */
+.pageFooter {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 56px;
+  border-top: 1px solid rgba(244,238,227,.12);
+}
+
+.pageFooterLabel {
+  font-family: var(--fontMono, monospace);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  opacity: 0.45;
+  text-transform: uppercase;
+}
+
+.pageTab {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.pageTabActive {
+  background: rgba(244,238,227,.18);
+  color: #fff;
+}
+
+.pageTabInactive {
+  background: transparent;
+  color: rgba(244,238,227,.4);
+}
+
+.pageFooterRight {
+  flex: 1;
+  text-align: right;
+  font-family: var(--fontMono, monospace);
+  font-size: 10px;
+  opacity: 0.4;
+}
+
+/* ── Page body shared ────────────────────────────────────────── */
+.pageBody {
+  padding: 0 56px;
+  /* leave room for footer ~50px */
+  height: calc(100% - 50px);
+  overflow: hidden;
+}
+
+/* ── Month page ──────────────────────────────────────────────── */
+.monthBody {
+  padding: 16px 56px 0;
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 55px - 170px);
+}
+
+.monthWeekdayRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.monthWeekdayHeader {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  letter-spacing: 1px;
+  opacity: 0.45;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.monthGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  flex: 1;
+}
+
+.monthCell {
+  padding: 4px 6px;
+  border-radius: 6px;
+  min-height: 60px;
+  background: rgba(244,238,227,.03);
+  border: 1px solid rgba(244,238,227,.06);
+  overflow: hidden;
+}
+
+.monthCellToday {
+  padding: 4px 6px;
+  border-radius: 6px;
+  min-height: 60px;
+  background: rgba(217,122,44,.15);
+  border: 1px solid rgba(217,122,44,.45);
+  overflow: hidden;
+}
+
+.monthCellPad {
+  min-height: 60px;
+  opacity: 0;
+}
+
+.monthDayNum {
+  font-family: var(--fontDisplay, Georgia, serif);
+  font-size: 16px;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.monthDayNumToday {
+  font-family: var(--fontDisplay, Georgia, serif);
+  font-size: 16px;
+  color: #D97A2C;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.monthEventPill {
+  margin-top: 2px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monthOverflow {
+  font-size: 10px;
+  opacity: 0.5;
+  margin-top: 2px;
+  padding-left: 2px;
+}
+
+/* ── Legend ──────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  gap: 20px;
+  padding: 10px 56px;
+  flex-wrap: wrap;
+}
+
+.legendChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Week page ───────────────────────────────────────────────── */
+.weekBody {
+  padding: 12px 56px 0;
+  overflow: hidden;
+  height: calc(100% - 55px - 130px);
+}
+
+.weekGrid {
+  display: grid;
+  grid-template-columns: 48px repeat(7, 1fr);
+  height: 100%;
+  gap: 0;
+  overflow: hidden;
+}
+
+.weekDayHeader {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  text-align: center;
+  padding: 4px 2px 8px;
+  opacity: 0.6;
+  border-bottom: 1px solid rgba(244,238,227,.1);
+}
+
+.weekDayHeaderToday {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  text-align: center;
+  padding: 4px 2px 8px;
+  color: #D97A2C;
+  border-bottom: 1px solid rgba(217,122,44,.4);
+}
+
+.weekTimeLabelCol {
+  display: flex;
+  flex-direction: column;
+}
+
+.weekTimeLabel {
+  font-family: var(--fontMono, monospace);
+  font-size: 10px;
+  opacity: 0.35;
+  text-align: right;
+  padding-right: 6px;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.weekDayCol {
+  border-left: 1px solid rgba(244,238,227,.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.weekHourRow {
+  flex: 1;
+  border-top: 1px solid rgba(244,238,227,.05);
+}
+
+.weekAllDayStrip {
+  height: 18px;
+  margin: 1px 1px 0;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weekEventBlock {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 11px;
+  overflow: hidden;
+  line-height: 1.2;
+}
+
+/* ── Day page ─────────────────────────────────────────────────── */
+.dayPageBody {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  padding: 16px 56px 0;
+  height: calc(100% - 55px - 140px);
+  overflow: hidden;
+}
+
+.dayHeadline {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0.5;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.dayHourList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.dayHourRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 0;
+  border-top: 1px solid rgba(244,238,227,.07);
+  min-height: 28px;
+}
+
+.dayHourLabel {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  opacity: 0.4;
+  min-width: 44px;
+  padding-top: 2px;
+}
+
+.dayHourEvents {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dayHourEvent {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayNextCard {
+  padding: 20px;
+  border-radius: 12px;
+  background: rgba(244,238,227,.05);
+  border: 1px solid rgba(244,238,227,.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dayNextLabel {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0.45;
+  text-transform: uppercase;
+}
+
+.dayNextTitle {
+  font-family: var(--fontDisplay, Georgia, serif);
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+
+.dayNextTime {
+  font-family: var(--fontMono, monospace);
+  font-size: 14px;
+  opacity: 0.65;
+}
+
+.dayNextMember {
+  font-size: 13px;
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+.dayNoneCard {
+  padding: 20px;
+  font-style: italic;
+  opacity: 0.35;
+  font-size: 14px;
+}
+
+/* ── Coming up page ──────────────────────────────────────────── */
+.comingUpBody {
+  padding: 16px 56px 0;
+  height: calc(100% - 55px - 140px);
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.comingUpHeadline {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0.45;
+  text-transform: uppercase;
+}
+
+.comingUpMonthSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comingUpMonthLabel {
+  font-family: var(--fontDisplay, Georgia, serif);
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  opacity: 0.7;
+  border-bottom: 1px solid rgba(244,238,227,.1);
+  padding-bottom: 6px;
+}
+
+.comingUpEventRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 0;
+}
+
+.comingUpEventDate {
+  font-family: var(--fontMono, monospace);
+  font-size: 11px;
+  opacity: 0.5;
+  min-width: 80px;
+}
+
+.comingUpEventDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.comingUpEventTitle {
+  font-family: var(--fontDisplay, Georgia, serif);
+  font-size: 18px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.comingUpEventMember {
+  font-size: 12px;
+  opacity: 0.45;
+}
+
+/* ── Portrait media query ────────────────────────────────────── */
+@media (orientation: portrait) {
+  .masthead {
+    padding: 24px 24px 12px;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .bigDate {
+    font-size: 40px;
+  }
+
+  .clock {
+    font-size: 48px;
+    text-align: left;
+  }
+
+  .monthBody,
+  .weekBody,
+  .dayPageBody,
+  .comingUpBody {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .legend {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .pageFooter {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .dayPageBody {
+    grid-template-columns: 1fr;
+  }
+
+  .weekGrid {
+    grid-template-columns: 36px repeat(7, 1fr);
+  }
+}
