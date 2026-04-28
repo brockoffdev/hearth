@@ -2,6 +2,7 @@
 
 import functools
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -65,6 +66,23 @@ class Settings(BaseSettings):
     # is never auto-fired; tests that need pipeline behaviour call
     # run_pipeline_for_upload() directly for deterministic sequencing.
     dispatch_runner_on_create_upload: bool = True
+
+    # ---------------------------------------------------------------------------
+    # Vision provider config
+    # ---------------------------------------------------------------------------
+
+    # Which VisionProvider to use. Override via HEARTH_VISION_PROVIDER.
+    vision_provider: Literal["ollama", "gemini", "anthropic"] = "ollama"
+
+    # URL of the Ollama daemon. Override via HEARTH_OLLAMA_ENDPOINT.
+    ollama_endpoint: str = "http://localhost:11434"
+
+    # Which model the provider uses. Override via HEARTH_VISION_MODEL.
+    vision_model: str = "qwen2.5-vl:7b"
+
+    # Above this confidence, events auto-publish; below, they queue for review.
+    # Override via HEARTH_CONFIDENCE_THRESHOLD.
+    confidence_threshold: float = 0.85
 
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
