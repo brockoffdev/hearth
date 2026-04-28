@@ -20,7 +20,12 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_THRESHOLD_MS = 6 * 60 * 1000;
 const TV_PAGES = ['Month', 'Week', 'Day', 'Coming up'] as const;
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const WEEK_HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] as const;
+// Cover all 24h so events at any hour render rather than silently disappearing.
+// Visually compressed because the day-grid scales to fill the panel.
+const WEEK_HOURS = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+  12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+] as const;
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -563,14 +568,17 @@ export function Tv(): JSX.Element {
 
   useEffect(() => {
     const tick = () => setClockNow(new Date());
-    // Align to the next minute boundary
+    let interval: ReturnType<typeof setInterval> | null = null;
+    // Align to the next minute boundary so the displayed time matches wall clock.
     const msToNextMinute = (60 - new Date().getSeconds()) * 1000 - new Date().getMilliseconds();
     const initial = setTimeout(() => {
       tick();
-      const interval = setInterval(tick, 60_000);
-      return () => clearInterval(interval);
+      interval = setInterval(tick, 60_000);
     }, msToNextMinute);
-    return () => clearTimeout(initial);
+    return () => {
+      clearTimeout(initial);
+      if (interval !== null) clearInterval(interval);
+    };
   }, []);
 
   const weekNumber = isoWeekNumber(clockNow);
