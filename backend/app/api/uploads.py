@@ -36,7 +36,6 @@ from backend.app.uploads.friendly_time import (
     format_thumb_label,
 )
 from backend.app.uploads.pipeline import (
-    STAGE_MEDIAN_SECONDS,
     estimate_remaining_seconds,
     queue_wait_seconds_simple,
 )
@@ -60,11 +59,6 @@ _EXT_TO_MEDIA_TYPE: dict[str, str] = {
 }
 
 _LIST_LIMIT = 50
-
-# Full pipeline median — used for queue-wait ETA calculation.
-# Computed by pipeline.py; kept here as an alias for _queue_wait_seconds below.
-_FULL_PIPELINE_MEDIAN_SECONDS: int = round(sum(STAGE_MEDIAN_SECONDS.values()))
-
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
