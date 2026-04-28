@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 import { ThemeProvider } from '../design/ThemeProvider';
 import { DesignSmoke } from './DesignSmoke';
+import { formatETA, formatDuration } from '../lib/eta';
 
 
 function renderSmoke() {
@@ -113,5 +114,50 @@ describe('DesignSmoke route', () => {
     renderSmoke();
     const toggleBtn = screen.getByText(/— click to cycle/);
     expect(toggleBtn).not.toBeNull();
+  });
+});
+
+describe('DesignSmoke — Phase 3.5 primitives section', () => {
+  it('renders the Phase 3.5 primitives section', () => {
+    const { container } = renderSmoke();
+    const section = container.querySelector('[data-testid="phase35-section"]');
+    expect(section).not.toBeNull();
+  });
+
+  it('renders Spinner elements at 3 sizes', () => {
+    renderSmoke();
+    expect(screen.getByRole('img', { name: 'Spinner 12px' })).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'Spinner 18px' })).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'Spinner 24px' })).not.toBeNull();
+  });
+
+  it('renders ThumbTile variants', () => {
+    renderSmoke();
+    expect(screen.getByText('default')).not.toBeNull();
+    expect(screen.getByText('accent dot')).not.toBeNull();
+    expect(screen.getByText('with badge')).not.toBeNull();
+  });
+
+  it('renders SectionRule with 3 status labels', () => {
+    renderSmoke();
+    expect(screen.getByText('In flight')).not.toBeNull();
+    expect(screen.getByText('Done')).not.toBeNull();
+    expect(screen.getByText("Couldn't read")).not.toBeNull();
+  });
+
+  it('renders formatETA examples', () => {
+    renderSmoke();
+    // null → '—'
+    expect(screen.getByText('—')).not.toBeNull();
+    // 45 → '~45 sec'
+    expect(screen.getByText(formatETA(45))).not.toBeNull();
+    // 184 → '~3 min 4 sec'
+    expect(screen.getByText(formatETA(184))).not.toBeNull();
+  });
+
+  it('renders formatDuration examples', () => {
+    renderSmoke();
+    expect(screen.getByText(formatDuration(64))).not.toBeNull();
+    expect(screen.getByText(formatDuration(120))).not.toBeNull();
   });
 });

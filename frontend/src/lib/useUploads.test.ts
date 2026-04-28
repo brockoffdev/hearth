@@ -292,10 +292,10 @@ describe('useUploads — retry', () => {
     });
 
     // Should have called POST /api/uploads/1/retry
-    const postCall = fetchMock.mock.calls.find(
-      ([url, init]: [string, RequestInit]) =>
-        url === '/api/uploads/1/retry' && init.method === 'POST',
-    );
+    const postCall = fetchMock.mock.calls.find((call: unknown[]) => {
+      const [url, init] = call as [string, RequestInit];
+      return url === '/api/uploads/1/retry' && init.method === 'POST';
+    });
     expect(postCall).toBeTruthy();
 
     // retryResult should be the new upload
@@ -332,10 +332,10 @@ describe('useUploads — cancel', () => {
     });
 
     // Should have called DELETE /api/uploads/1
-    const deleteCall = fetchMock.mock.calls.find(
-      ([url, init]: [string, RequestInit]) =>
-        url === '/api/uploads/1' && init.method === 'DELETE',
-    );
+    const deleteCall = fetchMock.mock.calls.find((call: unknown[]) => {
+      const [url, init] = call as [string, RequestInit];
+      return url === '/api/uploads/1' && init.method === 'DELETE';
+    });
     expect(deleteCall).toBeTruthy();
 
     // After refetch, uploads list is empty

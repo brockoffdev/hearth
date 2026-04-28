@@ -13,6 +13,12 @@ import { Input } from '../components/Input';
 import { WizardSteps } from '../components/WizardSteps';
 import type { WizardStep } from '../components/WizardSteps';
 import type { FamilyMemberId } from '../lib/family';
+import { Spinner } from '../components/Spinner';
+import { ThumbTile } from '../components/ThumbTile';
+import { SectionRule } from '../components/SectionRule';
+import { Chevron } from '../components/Chevron';
+import { BackChevron } from '../components/BackChevron';
+import { formatETA, formatDuration } from '../lib/eta';
 import styles from './DesignSmoke.module.css';
 
 const FAMILY_MEMBERS: FamilyMemberId[] = ['bryant', 'danielle', 'isabella', 'eliana', 'family'];
@@ -277,6 +283,93 @@ export function DesignSmoke() {
               </DesktopShell>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Phase 3.5 primitives section */}
+      <section className={styles.section} data-testid="phase35-section">
+        <h2 className={styles.sectionTitle}>Phase 3.5 Primitives</h2>
+
+        {/* Spinner */}
+        <div className={styles.row} style={{ marginBottom: '1.5rem' }}>
+          {([12, 18, 24] as const).map((size) => (
+            <div key={size} className={styles.swatch}>
+              <Spinner size={size} ariaLabel={`Spinner ${size}px`} />
+              <span className={styles.swatchLabel}>{size}px</span>
+            </div>
+          ))}
+        </div>
+
+        {/* ThumbTile */}
+        <div className={styles.row} style={{ marginBottom: '1.5rem' }}>
+          <div className={styles.swatch}>
+            <ThumbTile />
+            <span className={styles.swatchLabel}>default</span>
+          </div>
+          <div className={styles.swatch}>
+            <ThumbTile accent="var(--accent)">📷</ThumbTile>
+            <span className={styles.swatchLabel}>accent dot</span>
+          </div>
+          <div className={styles.swatch}>
+            <ThumbTile
+              accent="var(--danger)"
+              badge={
+                <span style={{
+                  width: 20, height: 20, borderRadius: 999,
+                  background: 'var(--accent)', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 800, border: '2px solid var(--paper)',
+                  fontFamily: 'var(--fontMono)',
+                }}>1</span>
+              }
+            >
+              📷
+            </ThumbTile>
+            <span className={styles.swatchLabel}>with badge</span>
+          </div>
+        </div>
+
+        {/* SectionRule */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <SectionRule label="In flight" dotColor="var(--accent)" count={2} />
+          <SectionRule label="Done" dotColor="var(--success)" count={5} />
+          <SectionRule label="Couldn't read" dotColor="var(--danger)" count={1} />
+        </div>
+
+        {/* Chevron + BackChevron */}
+        <div className={styles.row} style={{ marginBottom: '1.5rem' }}>
+          <div className={styles.swatch}>
+            <Chevron />
+            <span className={styles.swatchLabel}>Chevron (14px)</span>
+          </div>
+          <div className={styles.swatch}>
+            <Chevron size={20} color="var(--accent)" />
+            <span className={styles.swatchLabel}>Chevron (20px accent)</span>
+          </div>
+          <div className={styles.swatch}>
+            <BackChevron />
+            <span className={styles.swatchLabel}>BackChevron (32px)</span>
+          </div>
+        </div>
+
+        {/* formatETA examples */}
+        <div className={styles.row}>
+          {([null, 0, 45, 184, 3600] as const).map((sec) => (
+            <div key={String(sec)} className={styles.swatch}>
+              <span style={{ fontFamily: 'var(--fontMono)', fontSize: 14, color: 'var(--ink)' }}>
+                {formatETA(sec)}
+              </span>
+              <span className={styles.swatchLabel}>{sec === null ? 'null' : `${sec}s`}</span>
+            </div>
+          ))}
+          {([45, 64, 120, 3661] as const).map((sec) => (
+            <div key={`dur-${sec}`} className={styles.swatch}>
+              <span style={{ fontFamily: 'var(--fontMono)', fontSize: 14, color: 'var(--fgSoft)' }}>
+                {formatDuration(sec)}
+              </span>
+              <span className={styles.swatchLabel}>dur {sec}s</span>
+            </div>
+          ))}
         </div>
       </section>
     </div>
