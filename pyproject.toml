@@ -72,3 +72,8 @@ ignore_errors = true
 [tool.pytest.ini_options]
 testpaths = ["tests/backend"]
 asyncio_mode = "auto"
+filterwarnings = [
+    # google-generativeai 0.8 emits a FutureWarning about migrating to google-genai.
+    # The spec pins this package version; the warning is cosmetic only.
+    "ignore::FutureWarning",
+]
