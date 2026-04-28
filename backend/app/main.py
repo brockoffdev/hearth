@@ -17,6 +17,8 @@ from backend.app.auth.bootstrap import ensure_bootstrap_admin
 from backend.app.config import get_settings
 from backend.app.db.base import get_session_factory
 from backend.app.static import mount_frontend
+from backend.app.uploads.pipeline import refresh_stage_medians_from_db
+from backend.app.uploads.runner import recover_pending_uploads
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +56,33 @@ def create_app() -> FastAPI:
             logger.info("Running database migrations…")
             await asyncio.to_thread(_run_migrations)
             logger.info("Migrations complete.")
+
+        # Phase 4 Task H: refresh stage medians from accumulated measurements.
+        try:
+            await refresh_stage_medians_from_db(get_session_factory())
+        except Exception:
+            logger.exception(
+                "Failed to refresh stage medians — using baseline values"
+            )
+
         if settings.bootstrap_admin_on_startup:
             logger.info("Ensuring bootstrap admin…")
             await ensure_bootstrap_admin(get_session_factory())
+
+        # Phase 4 Task H: re-enqueue uploads stranded by a prior server crash.
+        if settings.recover_uploads_on_startup:
+            try:
+                recovered = await recover_pending_uploads(get_session_factory())
+                if recovered > 0:
+                    logger.info(
+                        "Recovered %d stranded upload(s) from prior session", recovered
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to recover stranded uploads — "
+                    "they will need manual cleanup"
+                )
+
         yield
 
     application = FastAPI(

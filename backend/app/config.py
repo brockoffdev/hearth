@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # bootstrap explicitly via the ensure_bootstrap_admin fixture).
     bootstrap_admin_on_startup: bool = True
 
+    # When True, scan for stranded uploads (status 'queued' or 'processing')
+    # on startup and re-enqueue them.  Uploads can be stranded if the server
+    # crashes mid-pipeline (the in-memory queue is lost but the DB rows remain).
+    # Set HEARTH_RECOVER_UPLOADS_ON_STARTUP=false in tests to avoid spurious
+    # task dispatch during unit tests.
+    recover_uploads_on_startup: bool = True
+
     # Required: a long random string used to sign session cookies.
     # Generate one with:
     #   python -c "import secrets; print(secrets.token_urlsafe(32))"
