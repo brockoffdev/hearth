@@ -6,27 +6,105 @@ services:
     environment:
       HEARTH_DEBUG: "false"
       # Use the /data volume mount for the SQLite file in production.
-      # Four slashes = sqlite:// + absolute path /data/hearth.db
+      # Four slashes = sqlite:// + absolute path /data/hearth.db.
       HEARTH_DATABASE_URL: "sqlite+aiosqlite:////data/hearth.db"
-      # Required: set HEARTH_SESSION_SECRET in your shell or a .env file before
-      # running `docker compose up`.  Generate a value with:
+      # Required: set HEARTH_SESSION_SECRET in your shell or a .env file
+      # before `docker compose up`.  Generate a value with:
       #   python -c "import secrets; print(secrets.token_urlsafe(32))"
-      # For production, use Docker secrets or your deployment platform's secret
-      # store.  Do NOT hardcode a value here.
+      # For production, prefer a secret store over a flat .env.  Do NOT
+      # hardcode a value here.
       HEARTH_SESSION_SECRET: ${HEARTH_SESSION_SECRET:?HEARTH_SESSION_SECRET must be set — see README}
+      # Talk to the Ollama sidecar over the compose network.
+      #
+      # To use a non-Dockerized Ollama (e.g. one already running on the
+      # host or another machine on the LAN):
+      #   1. Comment out both the `ollama` and `ollama-init` services
+      #      below, plus the `depends_on:` block on this service.
+      #   2. Override HEARTH_OLLAMA_ENDPOINT to point at your daemon.
+      #      For a daemon on the Docker host:
+      #        HEARTH_OLLAMA_ENDPOINT: "http://host.docker.internal:11434"
+      #        # On Linux you also need:
+      #        # extra_hosts:
+      #        #   - "host.docker.internal:host-gateway"
+      #      For a daemon on another LAN host:
+      #        HEARTH_OLLAMA_ENDPOINT: "http://10.0.0.42:11434"
+      HEARTH_OLLAMA_ENDPOINT: "http://ollama:11434"
+      # The lifespan vision-health probe is on by default in production.
+      # See backend/app/config.py for the setting; CI overrides it to
+      # false in the smoke test (no Ollama daemon running there).
     volumes:
       - hearth-data:/data
-    # depends_on:
-    #   - ollama  # uncomment in Phase 5 when VLM is wired
+    depends_on:
+      # Wait for the model pull to finish before Hearth starts handling
+      # requests — otherwise the first photo upload would hang for
+      # several minutes while Ollama downloads the model.
+      ollama-init:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_started
 
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   ports:
-  #     - "11434:11434"
-  #   volumes:
-  #     - ollama-data:/root/.ollama
-  #   # for AMD ROCm: add devices: ['/dev/kfd', '/dev/dri'] and group_add per Ollama AMD docs
+  # ─── Local VLM via Ollama ─────────────────────────────────────
+  # Defaults to CPU inference (Zen 4 with AVX-512+VNNI handles a 7B Q4
+  # model at ~15–30 s/cell).  For real throughput on multi-photo runs,
+  # enable a GPU below — pick AMD ROCm OR NVIDIA depending on hardware.
+  # GPUs are HIGHLY recommended.
+  ollama:
+    image: ollama/ollama:latest
+    # Uncomment to expose the daemon on the host LAN (drive it from a
+    # separate dev box, etc.).  Leave un-exposed in single-host setups
+    # to keep the attack surface small.
+    # ports:
+    #   - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    # ── GPU acceleration (uncomment ONE block) ────────────────
+    #
+    # AMD ROCm (Radeon 780M / 7000-series / etc.):
+    #   - requires ROCm drivers on the host
+    #   - the user running compose must be in the `video` group
+    # devices:
+    #   - /dev/kfd
+    #   - /dev/dri
+    # group_add:
+    #   - video
+    #
+    # NVIDIA (any CUDA-capable GPU):
+    #   - requires nvidia-container-toolkit on the host
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ─── One-shot model pull ──────────────────────────────────────
+  # Polls the Ollama daemon until it answers, then pulls the configured
+  # VLM model into the shared `ollama-data` volume.  Exits 0 when done.
+  # Subsequent `docker compose up` runs see the model already cached
+  # and finish near-instantly.
+  #
+  # Default model matches Settings.vision_model in backend/app/config.py
+  # (qwen2.5-vl:7b, ~5 GB Q4).  If you change the active model via
+  # /admin/settings, pull it manually:
+  #   docker compose run --rm ollama-init ollama pull <model-tag>
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        until ollama list >/dev/null 2>&1; do
+          echo "ollama-init: waiting for daemon..."
+          sleep 1
+        done
+        ollama pull qwen2.5-vl:7b
+    restart: "no"
 
 volumes:
   hearth-data:
-  # ollama-data:
+  ollama-data:
