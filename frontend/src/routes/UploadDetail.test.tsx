@@ -15,6 +15,11 @@ import { HEARTH_STAGES } from '../lib/stages';
 import type { Event as CalEvent, EventList } from '../lib/events';
 import * as eventsModule from '../lib/events';
 
+// Mock usePendingCount so it doesn't fire fetch requests in unit tests.
+vi.mock('../lib/usePendingCount', () => ({
+  usePendingCount: () => ({ count: 0, isLoading: false, refetch: vi.fn() }),
+}));
+
 // ---------------------------------------------------------------------------
 // MockEventSource
 // ---------------------------------------------------------------------------

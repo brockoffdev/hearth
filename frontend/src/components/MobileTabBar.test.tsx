@@ -2,11 +2,15 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 import { MobileTabBar, TABS } from './MobileTabBar';
+import type { TabId } from './MobileTabBar';
 
-function renderBar(active: Parameters<typeof MobileTabBar>[0]['active']) {
+function renderBar(
+  active: TabId,
+  badges?: Parameters<typeof MobileTabBar>[0]['badges'],
+) {
   return render(
     <MemoryRouter>
-      <MobileTabBar active={active} />
+      <MobileTabBar active={active} badges={badges} />
     </MemoryRouter>,
   );
 }
@@ -85,5 +89,46 @@ describe('MobileTabBar', () => {
     );
     const nav = container.querySelector('nav');
     expect(nav?.classList.contains('custom-bar')).toBe(true);
+  });
+
+  it('renders a badge on the review tab when badges.review > 0', () => {
+    renderBar('home', { review: 3 });
+    const badge = screen.getByLabelText('3 pending');
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toBe('3');
+  });
+
+  it('does not render a badge when badges.review is 0', () => {
+    renderBar('home', { review: 0 });
+    expect(screen.queryByLabelText('0 pending')).toBeNull();
+  });
+
+  it('does not render a badge when badges prop is omitted', () => {
+    renderBar('home');
+    const badges = screen.queryAllByLabelText(/pending/);
+    expect(badges).toHaveLength(0);
+  });
+
+  it('does not render a badge on review tab when badges.review is 0 (suppressed active case)', () => {
+    renderBar('review', { review: 0 });
+    expect(screen.queryByLabelText('0 pending')).toBeNull();
+  });
+
+  it('renders badge on non-active tabs when count > 0', () => {
+    renderBar('home', { review: 5 });
+    const badge = screen.getByLabelText('5 pending');
+    expect(badge).not.toBeNull();
+  });
+
+  it('caps badge display at 99+ for counts over 99', () => {
+    renderBar('home', { review: 150 });
+    const badge = screen.getByLabelText('150 pending');
+    expect(badge.textContent).toBe('99+');
+  });
+
+  it('can show badges on multiple tabs simultaneously', () => {
+    renderBar('home', { review: 2, uploads: 4 });
+    expect(screen.getByLabelText('2 pending')).not.toBeNull();
+    expect(screen.getByLabelText('4 pending')).not.toBeNull();
   });
 });

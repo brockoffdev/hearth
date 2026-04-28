@@ -13,6 +13,7 @@ import { formatETA } from '../lib/eta';
 import { useUploads } from '../lib/useUploads';
 import { MobileTabBar } from '../components/MobileTabBar';
 import { OAuthHealthBanner } from '../components/OAuthHealthBanner';
+import { usePendingCount } from '../lib/usePendingCount';
 import styles from './Index.module.css';
 
 // ---------------------------------------------------------------------------
@@ -119,6 +120,7 @@ export function Index(): JSX.Element {
     state.status === 'authenticated' ? state.user.username : '';
 
   const { uploads, isLoading, loadError, inflightCount, longestETA, lastFetchedAt } = useUploads();
+  const { count: pendingCount } = usePendingCount();
 
   const visibleUploads = isLoading ? null : uploads.slice(0, 10);
 
@@ -213,7 +215,7 @@ export function Index(): JSX.Element {
         <UploadsLink hasInflight={inflightCount > 0} />
       </main>
 
-      <MobileTabBar active="home" />
+      <MobileTabBar active="home" badges={{ review: pendingCount }} />
     </div>
   );
 }

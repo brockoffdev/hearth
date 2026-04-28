@@ -10,6 +10,7 @@ import { Chevron } from '../components/Chevron';
 import { HBtn } from '../components/HBtn';
 import { MobileTabBar } from '../components/MobileTabBar';
 import { useNewCaptureSheet } from '../components/NewCaptureSheet';
+import { usePendingCount } from '../lib/usePendingCount';
 import { OAuthHealthBanner } from '../components/OAuthHealthBanner';
 import styles from './Status.module.css';
 
@@ -267,6 +268,7 @@ function CTAButton({ onClick }: CTAButtonProps): JSX.Element {
 export function Status(): JSX.Element {
   const { uploads, inflightCount, longestETA, isLoading, loadError, retry, cancel } = useUploads();
   const sheet = useNewCaptureSheet();
+  const { count: pendingCount } = usePendingCount();
 
   const inflight  = uploads.filter((u) => u.status === 'processing' && u.current_stage !== 'queued');
   const queued    = uploads.filter((u) => u.status === 'processing' && u.current_stage === 'queued');
@@ -397,7 +399,7 @@ export function Status(): JSX.Element {
         )}
       </div>
 
-      <MobileTabBar active="uploads" />
+      <MobileTabBar active="uploads" badges={{ review: pendingCount }} />
     </div>
   );
 }

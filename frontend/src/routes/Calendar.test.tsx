@@ -19,6 +19,11 @@ vi.mock('../lib/family', () => ({
   listFamily: vi.fn(),
 }));
 
+// Mock usePendingCount so it doesn't fire fetch requests in unit tests.
+vi.mock('../lib/usePendingCount', () => ({
+  usePendingCount: () => ({ count: 0, isLoading: false, refetch: vi.fn() }),
+}));
+
 import * as eventsModule from '../lib/events';
 import * as familyModule from '../lib/family';
 

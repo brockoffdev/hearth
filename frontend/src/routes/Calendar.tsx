@@ -8,6 +8,7 @@ import type { ApiFamilyMember } from '../lib/family';
 import { Spinner } from '../components/Spinner';
 import { HBtn } from '../components/HBtn';
 import { MobileTabBar } from '../components/MobileTabBar';
+import { usePendingCount } from '../lib/usePendingCount';
 import {
   buildMonthGrid,
   eventIsoDate,
@@ -335,6 +336,8 @@ export function Calendar(): JSX.Element {
     })();
   }, []);
 
+  const { count: pendingCount } = usePendingCount();
+
   const handleRetry = () => setFetchTrigger((n) => n + 1);
 
   const handlePrev = () => {
@@ -448,7 +451,7 @@ export function Calendar(): JSX.Element {
           />
         </div>
 
-        <MobileTabBar active="calendar" />
+        <MobileTabBar active="calendar" badges={{ review: pendingCount }} />
       </div>
     </div>
   );

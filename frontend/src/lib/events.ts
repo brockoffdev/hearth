@@ -77,6 +77,15 @@ export async function rejectEvent(id: number): Promise<void> {
   return apiFetch<void>(`/api/events/${id}`, { method: 'DELETE' });
 }
 
+export async function getPendingCount(): Promise<number> {
+  const data = await apiFetch<{ count: number }>('/api/events/pending-count');
+  return data.count;
+}
+
+export async function republishEvent(id: number | string): Promise<Event> {
+  return apiFetch<Event>(`/api/events/${id}/republish`, { method: 'POST' });
+}
+
 export function cellCropUrl(eventId: number): string {
   return `/api/events/${eventId}/cell-crop`;
 }
