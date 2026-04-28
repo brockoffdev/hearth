@@ -1,8 +1,7 @@
 """SQLAlchemy 2.0 declarative models for Phase 2+ tables.
 
 Tables created here: users, family_members, oauth_tokens, settings, uploads,
-pipeline_stage_durations.
-Deferred to later phases: events, event_corrections.
+pipeline_stage_durations, events, event_corrections.
 """
 
 from datetime import datetime
@@ -123,4 +122,61 @@ class PipelineStageDuration(Base):
     duration_seconds: Mapped[float] = mapped_column(nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+
+class Event(Base):
+    """A calendar event parsed from an uploaded photo or created by hand."""
+
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    upload_id: Mapped[int | None] = mapped_column(
+        ForeignKey("uploads.id"), nullable=True, index=True
+    )
+    family_member_id: Mapped[int | None] = mapped_column(
+        ForeignKey("family_members.id"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(nullable=False)
+    start_dt: Mapped[datetime] = mapped_column(nullable=False, index=True)
+    end_dt: Mapped[datetime | None] = mapped_column(nullable=True)
+    all_day: Mapped[bool] = mapped_column(nullable=False, server_default="0")
+    location: Mapped[str | None] = mapped_column(nullable=True)
+    notes: Mapped[str | None] = mapped_column(nullable=True)
+    confidence: Mapped[float] = mapped_column(nullable=False, server_default="1.0")
+    status: Mapped[str] = mapped_column(nullable=False, index=True)
+    google_event_id: Mapped[str | None] = mapped_column(nullable=True)
+    cell_crop_path: Mapped[str | None] = mapped_column(nullable=True)
+    raw_vlm_json: Mapped[str | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    published_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_review','auto_published','published','rejected','superseded')",
+            name="events_status_check",
+        ),
+    )
+
+
+class EventCorrection(Base):
+    """A user correction to a parsed event — stored as few-shot examples for the VLM."""
+
+    __tablename__ = "event_corrections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        ForeignKey("events.id"), nullable=False, index=True
+    )
+    before_json: Mapped[str] = mapped_column(nullable=False)
+    after_json: Mapped[str] = mapped_column(nullable=False)
+    cell_crop_path: Mapped[str | None] = mapped_column(nullable=True)
+    corrected_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    corrected_at: Mapped[datetime] = mapped_column(
+        nullable=False, server_default=text("CURRENT_TIMESTAMP"), index=True
     )

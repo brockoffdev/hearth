@@ -20,6 +20,9 @@ os.environ.setdefault("HEARTH_SESSION_SECRET", "test-secret-do-not-use-in-prod")
 # need pipeline behaviour call run_pipeline_for_upload() directly so they can
 # control timing precisely.
 os.environ.setdefault("HEARTH_DISPATCH_RUNNER_ON_CREATE_UPLOAD", "false")
+# Disable startup recovery sweep in tests; test_pipeline_recovery.py exercises
+# recover_pending_uploads() directly without going through lifespan.
+os.environ.setdefault("HEARTH_RECOVER_UPLOADS_ON_STARTUP", "false")
 
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -31,6 +34,19 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 
 from backend.app.config import get_settings
 from backend.app.db.base import get_session_factory
+from backend.app.uploads.pipeline import STAGE_MEDIAN_BASELINE, _stage_medians
+
+
+@pytest.fixture(autouse=True)
+def reset_stage_medians_to_baseline() -> None:
+    """Reset the module-level _stage_medians dict to baseline before each test.
+
+    refresh_stage_medians_from_db() mutates _stage_medians in place; without
+    this reset, tests that call refresh would leak modified values into
+    subsequent tests (especially across test files in a single pytest session).
+    """
+    _stage_medians.clear()
+    _stage_medians.update(STAGE_MEDIAN_BASELINE)
 
 
 def _alembic_config_for(url: str) -> Config:

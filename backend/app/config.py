@@ -2,6 +2,7 @@
 
 import functools
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -35,6 +36,13 @@ class Settings(BaseSettings):
     # bootstrap explicitly via the ensure_bootstrap_admin fixture).
     bootstrap_admin_on_startup: bool = True
 
+    # When True, scan for stranded uploads (status 'queued' or 'processing')
+    # on startup and re-enqueue them.  Uploads can be stranded if the server
+    # crashes mid-pipeline (the in-memory queue is lost but the DB rows remain).
+    # Set HEARTH_RECOVER_UPLOADS_ON_STARTUP=false in tests to avoid spurious
+    # task dispatch during unit tests.
+    recover_uploads_on_startup: bool = True
+
     # Required: a long random string used to sign session cookies.
     # Generate one with:
     #   python -c "import secrets; print(secrets.token_urlsafe(32))"
@@ -65,6 +73,44 @@ class Settings(BaseSettings):
     # is never auto-fired; tests that need pipeline behaviour call
     # run_pipeline_for_upload() directly for deterministic sequencing.
     dispatch_runner_on_create_upload: bool = True
+
+    # ---------------------------------------------------------------------------
+    # Vision provider config
+    # ---------------------------------------------------------------------------
+
+    # Which VisionProvider to use. Override via HEARTH_VISION_PROVIDER.
+    vision_provider: Literal["ollama", "gemini", "anthropic"] = "ollama"
+
+    # URL of the Ollama daemon. Override via HEARTH_OLLAMA_ENDPOINT.
+    ollama_endpoint: str = "http://localhost:11434"
+
+    # Which model the provider uses. Override via HEARTH_VISION_MODEL.
+    vision_model: str = "qwen2.5-vl:7b"
+
+    # Above this confidence, events auto-publish; below, they queue for review.
+    # Override via HEARTH_CONFIDENCE_THRESHOLD.
+    confidence_threshold: float = 0.85
+
+    # Gemini API key (BYO). Required when vision_provider='gemini'.
+    # Get one at https://aistudio.google.com/.
+    # Override via HEARTH_GEMINI_API_KEY.
+    # Note: when switching providers, set BOTH vision_provider AND vision_model;
+    # the factory does not auto-swap to provider-specific defaults.
+    gemini_api_key: str = ""
+
+    # Anthropic API key (BYO). Required when vision_provider='anthropic'.
+    # Get one at https://console.anthropic.com/.
+    # Override via HEARTH_ANTHROPIC_API_KEY.
+    # Note: when switching providers, set BOTH vision_provider AND vision_model;
+    # the factory does not auto-swap to provider-specific defaults.
+    anthropic_api_key: str = ""
+
+    # When True, POST /api/uploads dispatches the real VLM pipeline
+    # (preprocessing + grid detect + per-cell VLM + color match).
+    # When False (default), uses the fake-stages-on-a-timer pipeline — useful
+    # for UI testing without a running VLM model.
+    # Override via HEARTH_USE_REAL_PIPELINE.
+    use_real_pipeline: bool = False
 
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
