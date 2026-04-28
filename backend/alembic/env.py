@@ -17,8 +17,11 @@ from backend.app.db.base import Base
 config = context.config
 
 # Set up Python logging from the alembic.ini [loggers] section.
+# disable_existing_loggers=False keeps the backend.app.* loggers alive after
+# alembic configures itself — otherwise fileConfig's default behavior wipes
+# them and every lifespan log line after migrations vanishes silently.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

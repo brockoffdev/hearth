@@ -23,6 +23,17 @@ from backend.app.vision import get_vision_provider
 
 logger = logging.getLogger(__name__)
 
+# Make sure the application's INFO-level logs are visible by default.
+# alembic's env.py calls fileConfig(...) on startup which used to wipe
+# the existing loggers; we now pass disable_existing_loggers=False there,
+# but a default basicConfig here ensures backend.app.* records have a
+# stderr handler regardless of how uvicorn is invoked or what other code
+# tweaks logging.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+)
+
 # Resolved once at import time; tests may monkeypatch this to redirect to a
 # temporary directory without affecting the real repo tree.
 _DOCS_DIR: Path = Path(__file__).resolve().parent.parent.parent / "docs"
@@ -59,8 +70,19 @@ def create_app() -> FastAPI:
             logger.info("Migrations complete.")
 
         # Phase 4 Task H: refresh stage medians from accumulated measurements.
+        # Wrapped in wait_for so a stalled DB connection (e.g. an aiosqlite
+        # worker that gets stuck) can't wedge startup forever.  The query
+        # itself is a single SELECT against an indexed table — 10 s is
+        # generous, and on timeout we just keep the baseline values.
         try:
-            await refresh_stage_medians_from_db(get_session_factory())
+            await asyncio.wait_for(
+                refresh_stage_medians_from_db(get_session_factory()),
+                timeout=10.0,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Refreshing stage medians timed out after 10s — using baseline values"
+            )
         except Exception:
             logger.exception(
                 "Failed to refresh stage medians — using baseline values"
