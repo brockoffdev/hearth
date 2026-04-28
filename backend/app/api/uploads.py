@@ -359,9 +359,23 @@ async def stream_upload_events(
     _check_access(upload, current_user)
 
     # Short-circuit if already terminal — don't wait for anything.
+    # The payload shape must match the polling-loop branch below so SSE
+    # consumers can rely on completed_stages / remaining_seconds always
+    # being present (otherwise a race between POST and SSE-subscribe in
+    # CI exposes the schema gap).
     if upload.status in ("completed", "failed"):
+        terminal_completed = (
+            json.loads(upload.completed_stages) if upload.completed_stages else []
+        )
+
         async def _already_done() -> AsyncGenerator[dict[str, str], None]:
-            payload = {"stage": "done", "message": "already-complete", "progress": None}
+            payload = {
+                "stage": "done",
+                "message": "already-complete",
+                "progress": None,
+                "completed_stages": terminal_completed,
+                "remaining_seconds": 0,
+            }
             yield {"event": "stage_update", "data": json.dumps(payload)}
 
         return EventSourceResponse(_already_done())
