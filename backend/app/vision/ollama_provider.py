@@ -17,60 +17,10 @@ from typing import Any
 
 import httpx
 
-from backend.app.vision import CellPromptContext, ExtractedEvent, FamilyPaletteEntry
+from backend.app.vision import CellPromptContext, ExtractedEvent
+from backend.app.vision._prompt import build_cell_prompt
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Prompt helpers
-# ---------------------------------------------------------------------------
-
-_PALETTE_LINE = "- {name} ({color_label}, hex {color_hex})"
-
-_PROMPT_TEMPLATE = """\
-You are reading one cell of a wall calendar dated {cell_label}.
-The cell may contain handwritten events. Each event was written by one
-of these family members (each in a distinct ink color):
-
-{palette_lines}
-
-Output ONLY a JSON array of events found in this cell. Each event has:
-- "title": the event description text
-- "time_text": time of day (e.g. "8:30 AM") or null if all-day
-- "color_hex": the dominant ink color in the writing (best-guess hex)
-- "owner_guess": the family member name (one of the listed family) whose
-  ink color most closely matches
-- "confidence": 0.0-1.0, your confidence in this reading
-- "raw_text": the literal text you read from the handwriting
-
-If the cell is empty, output []. Do not output explanations, just the JSON.\
-"""
-
-_CORRECTIONS_HEADER = (
-    "\nRecent corrections from the user (use these to improve your reading):\n"
-)
-
-
-def _build_palette_lines(palette: tuple[FamilyPaletteEntry, ...]) -> str:
-    return "\n".join(
-        _PALETTE_LINE.format(
-            name=entry.name,
-            color_label=entry.color_label,
-            color_hex=entry.color_hex,
-        )
-        for entry in palette
-    )
-
-
-def _build_corrections_section(corrections: tuple[dict[str, str], ...]) -> str:
-    if not corrections:
-        return ""
-    lines = [_CORRECTIONS_HEADER]
-    for correction in corrections:
-        before = correction.get("before", "")
-        after = correction.get("after", "")
-        lines.append(f'- "{before}" was actually "{after}"')
-    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -119,22 +69,12 @@ class OllamaProvider:
         return httpx.AsyncClient(timeout=timeout)
 
     def _build_prompt(self, context: CellPromptContext) -> str:
-        """Assemble the full prompt string for a cell."""
-        palette_lines = _build_palette_lines(context.family_palette)
-        base = _PROMPT_TEMPLATE.format(
-            cell_label=context.cell_label,
-            palette_lines=palette_lines,
-        )
-        corrections = _build_corrections_section(context.few_shot_corrections)
-        if corrections:
-            # Insert corrections block just before the "Output ONLY" instruction.
-            output_marker = '\nOutput ONLY a JSON array'
-            insert_at = base.find(output_marker)
-            if insert_at != -1:
-                base = base[:insert_at] + corrections + base[insert_at:]
-            else:
-                base = base + corrections
-        return base
+        """Assemble the full prompt string for a cell.
+
+        Delegates to the shared ``build_cell_prompt`` helper so the prompt text
+        is identical across all VisionProvider implementations.
+        """
+        return build_cell_prompt(context)
 
     @staticmethod
     def _parse_response(raw_response: str) -> tuple[ExtractedEvent, ...]:
