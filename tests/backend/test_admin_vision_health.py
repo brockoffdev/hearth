@@ -74,7 +74,7 @@ async def test_vision_health_returns_healthy_when_provider_responds(
 ) -> None:
     """Admin GET /api/admin/vision/health returns 200 with healthy=true when provider responds."""
     mock_provider = AsyncMock()
-    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.name = "ollama:qwen2.5vl:7b"
     mock_provider.health_check = AsyncMock(return_value=True)
 
     with patch(
@@ -90,8 +90,8 @@ async def test_vision_health_returns_healthy_when_provider_responds(
     assert body["healthy"] is True
     assert body["error"] is None
     assert body["provider"] == "ollama"
-    assert body["model"] == "qwen2.5-vl:7b"
-    assert body["name"] == "ollama:qwen2.5-vl:7b"
+    assert body["model"] == "qwen2.5vl:7b"
+    assert body["name"] == "ollama:qwen2.5vl:7b"
 
 
 async def test_vision_health_returns_unhealthy_when_provider_fails(
@@ -99,7 +99,7 @@ async def test_vision_health_returns_unhealthy_when_provider_fails(
 ) -> None:
     """health_check() returning False yields 200 + healthy=false."""
     mock_provider = AsyncMock()
-    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.name = "ollama:qwen2.5vl:7b"
     mock_provider.health_check = AsyncMock(return_value=False)
 
     with patch(
@@ -122,7 +122,7 @@ async def test_vision_health_handles_health_check_raising(
 ) -> None:
     """A buggy provider whose health_check() raises maps to 200 + healthy=false."""
     mock_provider = AsyncMock()
-    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.name = "ollama:qwen2.5vl:7b"
     mock_provider.health_check = AsyncMock(side_effect=RuntimeError("boom"))
 
     with patch(

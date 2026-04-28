@@ -55,7 +55,7 @@ def _make_generate_transport(
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             status_code=status_code,
-            json={"response": response_json, "model": "qwen2.5-vl:7b"},
+            json={"response": response_json, "model": "qwen2.5vl:7b"},
         )
 
     return httpx.MockTransport(handler)
@@ -293,14 +293,14 @@ async def test_extract_events_sends_correct_model_name() -> None:
     """The model field in the request payload matches the configured model."""
     captured: list[httpx.Request] = []
     provider = OllamaProvider(
-        model="qwen2.5-vl:7b",
+        model="qwen2.5vl:7b",
         _transport=_make_capture_transport(captured, response_json="[]"),
     )
     await provider.extract_events_from_cell(_FAKE_IMAGE, _DEFAULT_CONTEXT)
 
     assert len(captured) == 1
     body = json.loads(captured[0].content)
-    assert body["model"] == "qwen2.5-vl:7b"
+    assert body["model"] == "qwen2.5vl:7b"
 
 
 async def test_extract_events_no_corrections_prompt_omits_correction_header() -> None:
@@ -336,8 +336,8 @@ async def test_extract_events_sends_stream_false_and_format_json() -> None:
 
 def test_provider_name_includes_model() -> None:
     """OllamaProvider.name is 'ollama:<model>'."""
-    provider = OllamaProvider(model="qwen2.5-vl:7b")
-    assert provider.name == "ollama:qwen2.5-vl:7b"
+    provider = OllamaProvider(model="qwen2.5vl:7b")
+    assert provider.name == "ollama:qwen2.5vl:7b"
 
 
 def test_provider_name_custom_model() -> None:

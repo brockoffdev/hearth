@@ -215,7 +215,7 @@ The 4 → 8 GB step is the meaningful accuracy bump (~5 points). The 8 → 16 GB
 **Settings exposed in `/admin/settings`:**
 - `vlm_keep_alive_seconds` — default `0`. User can raise it (e.g. 300) if they're about to take several photos in quick succession.
 - `vlm_max_concurrent_cells` — caps how many cells are dispatched in parallel (default 2 with the 8GB budget; raising it linearly increases peak memory).
-- `vlm_model` — default `qwen2.5-vl:7b`. Pull-on-first-use. User can switch to `qwen2.5-vl:3b` for tighter memory or to a larger model for more accuracy without rebuilding the container.
+- `vlm_model` — default `qwen2.5vl:7b`. Pull-on-first-use. User can switch to `qwen2.5vl:3b` for tighter memory or to a larger model for more accuracy without rebuilding the container.
 
 **Hosted alternatives** (configurable, BYO key) — these have **zero local memory cost**, since they call out:
 - **Gemini 2.5 Flash** — 87–94% accuracy on handwritten calendars, ~$0.001/image. ~10 photos/month = $0.01/month. Use when local accuracy isn't enough or you'd rather not load the model at all.
@@ -383,7 +383,7 @@ uploads(
     image_path TEXT NOT NULL,                 -- path inside /data/uploads/
     uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status TEXT NOT NULL CHECK (status IN ('queued','processing','completed','failed')),
-    provider TEXT,                            -- e.g. "ollama:qwen2.5-vl:7b" or "gemini-2.5-flash"
+    provider TEXT,                            -- e.g. "ollama:qwen2.5vl:7b" or "gemini-2.5-flash"
     error TEXT,
     finished_at TIMESTAMP
 );

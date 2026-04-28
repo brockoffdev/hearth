@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     ollama_endpoint: str = "http://localhost:11434"
 
     # Which model the provider uses. Override via HEARTH_VISION_MODEL.
-    vision_model: str = "qwen2.5-vl:7b"
+    vision_model: str = "qwen2.5vl:7b"
 
     # Above this confidence, events auto-publish; below, they queue for review.
     # Override via HEARTH_CONFIDENCE_THRESHOLD.

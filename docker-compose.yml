@@ -85,7 +85,7 @@ services:
   # and finish near-instantly.
   #
   # Default model matches Settings.vision_model in backend/app/config.py
-  # (qwen2.5-vl:7b, ~5 GB Q4).  If you change the active model via
+  # (qwen2.5vl:7b, ~5 GB Q4).  If you change the active model via
   # /admin/settings, pull it manually:
   #   docker compose run --rm ollama-init ollama pull <model-tag>
   ollama-init:
@@ -102,7 +102,7 @@ services:
           echo "ollama-init: waiting for daemon..."
           sleep 1
         done
-        ollama pull qwen2.5-vl:7b
+        ollama pull qwen2.5vl:7b
     restart: "no"
 
 volumes:

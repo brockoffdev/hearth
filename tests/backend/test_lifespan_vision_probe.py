@@ -70,7 +70,7 @@ async def test_lifespan_probe_logs_info_when_healthy() -> None:
     settings = _make_settings()
 
     mock_provider = AsyncMock()
-    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.name = "ollama:qwen2.5vl:7b"
     mock_provider.health_check = AsyncMock(return_value=True)
 
     with patch("backend.app.main.get_vision_provider", return_value=mock_provider), \
@@ -82,7 +82,7 @@ async def test_lifespan_probe_logs_info_when_healthy() -> None:
         c.args for c in mock_logger.info.call_args_list
     ]
     assert any(
-        "ollama:qwen2.5-vl:7b" in str(args) and "healthy" in str(args)
+        "ollama:qwen2.5vl:7b" in str(args) and "healthy" in str(args)
         for args in info_calls
     )
 
@@ -92,7 +92,7 @@ async def test_lifespan_probe_logs_warning_when_unhealthy() -> None:
     settings = _make_settings()
 
     mock_provider = AsyncMock()
-    mock_provider.name = "ollama:qwen2.5-vl:7b"
+    mock_provider.name = "ollama:qwen2.5vl:7b"
     mock_provider.health_check = AsyncMock(return_value=False)
 
     with patch("backend.app.main.get_vision_provider", return_value=mock_provider), \
@@ -104,7 +104,7 @@ async def test_lifespan_probe_logs_warning_when_unhealthy() -> None:
         c.args for c in mock_logger.warning.call_args_list
     ]
     assert any(
-        "ollama:qwen2.5-vl:7b" in str(args) and "health check failed" in str(args)
+        "ollama:qwen2.5vl:7b" in str(args) and "health check failed" in str(args)
         for args in warning_calls
     )
 
