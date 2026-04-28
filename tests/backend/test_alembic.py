@@ -62,6 +62,62 @@ async def test_alembic_upgrade_downgrade_roundtrip(
                 set(table_names)
             ), f"Missing tables: {expected_tables - set(table_names)}"
 
+            # Verify Phase 4 Task A tables are present.
+            phase4_tables = {"events", "event_corrections"}
+            assert phase4_tables.issubset(
+                set(table_names)
+            ), f"Missing Phase 4 tables: {phase4_tables - set(table_names)}"
+
+            # Spot-check events columns.
+            events_cols = await conn.run_sync(
+                lambda sync_conn: {
+                    c["name"] for c in inspect(sync_conn).get_columns("events")
+                }
+            )
+            required_event_cols = {
+                "id",
+                "upload_id",
+                "family_member_id",
+                "title",
+                "start_dt",
+                "end_dt",
+                "all_day",
+                "location",
+                "notes",
+                "confidence",
+                "status",
+                "google_event_id",
+                "cell_crop_path",
+                "raw_vlm_json",
+                "created_at",
+                "updated_at",
+                "published_at",
+            }
+            assert required_event_cols.issubset(events_cols), (
+                f"Missing events columns: {required_event_cols - events_cols}"
+            )
+
+            # Spot-check event_corrections columns.
+            corrections_cols = await conn.run_sync(
+                lambda sync_conn: {
+                    c["name"]
+                    for c in inspect(sync_conn).get_columns("event_corrections")
+                }
+            )
+            required_correction_cols = {
+                "id",
+                "event_id",
+                "before_json",
+                "after_json",
+                "cell_crop_path",
+                "corrected_by",
+                "corrected_at",
+            }
+            assert required_correction_cols.issubset(corrections_cols), (
+                f"Missing event_corrections columns: "
+                f"{required_correction_cols - corrections_cols}"
+            )
+
             # Verify seed data: exactly 5 family members in correct order.
             rows = (
                 await conn.execute(
