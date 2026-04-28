@@ -1,7 +1,7 @@
 """OllamaProvider — VisionProvider backed by a local Ollama daemon.
 
 Phase 4 default provider.  Talks to http://localhost:11434 by default
-using the ``qwen2.5-vl:7b`` multimodal model.
+using the ``qwen2.5vl:7b`` multimodal model.
 
 The provider is tested via httpx.MockTransport (see tests/backend/test_vision_ollama.py).
 The ``_transport`` constructor kwarg is a **test seam only** — do not pass it in
@@ -34,14 +34,14 @@ class OllamaProvider:
     Attributes:
         endpoint: Base URL of the Ollama daemon (no trailing slash).
         model:    Model tag to use for inference.
-        name:     Provenance string used in event records, e.g. "ollama:qwen2.5-vl:7b".
+        name:     Provenance string used in event records, e.g. "ollama:qwen2.5vl:7b".
     """
 
     def __init__(
         self,
         *,
         endpoint: str = "http://localhost:11434",
-        model: str = "qwen2.5-vl:7b",
+        model: str = "qwen2.5vl:7b",
         _transport: httpx.MockTransport | None = None,
     ) -> None:
         """Create an OllamaProvider.

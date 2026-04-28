@@ -90,13 +90,13 @@ class VisionProvider(Protocol):
     """The vision provider interface every backend implementation honors.
 
     Implementations must expose:
-    - ``name``                  — provenance string, e.g. "ollama:qwen2.5-vl:7b"
+    - ``name``                  — provenance string, e.g. "ollama:qwen2.5vl:7b"
     - ``extract_events_from_cell`` — read handwriting from one cropped cell image
     - ``health_check``          — lightweight liveness probe used at startup
     """
 
     name: str
-    """Provenance identifier, e.g. "ollama:qwen2.5-vl:7b"."""
+    """Provenance identifier, e.g. "ollama:qwen2.5vl:7b"."""
 
     async def extract_events_from_cell(
         self,
@@ -138,7 +138,7 @@ def get_vision_provider(settings: Settings) -> VisionProvider:
     ``vision_model`` — the factory does not auto-select a provider-specific
     default model.  Suggested defaults per spec §6.2:
 
-    - ``ollama``     → ``qwen2.5-vl:7b``
+    - ``ollama``     → ``qwen2.5vl:7b``
     - ``gemini``     → ``gemini-2.5-flash``
     - ``anthropic``  → ``claude-haiku-4-5``
 
@@ -197,7 +197,7 @@ def get_vision_provider_from_dict(effective: dict[str, Any]) -> VisionProvider:
 
         return OllamaProvider(
             endpoint=effective.get("ollama_endpoint", "http://localhost:11434"),
-            model=effective.get("vision_model", "qwen2.5-vl:7b"),
+            model=effective.get("vision_model", "qwen2.5vl:7b"),
         )
 
     if provider == "gemini":
