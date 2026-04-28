@@ -38,13 +38,13 @@ jobs:
     name: Backend (ruff + mypy + pytest)
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # uv works on both GHA-hosted and self-hosted runners; the
       # myoung34/github-runner image is bare Ubuntu so Python isn't
       # pre-installed — `uv python install` provisions it on demand.
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v7
         with:
           version: latest
           enable-cache: true
@@ -69,10 +69,10 @@ jobs:
     name: Frontend (eslint + tsc + vitest + build)
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # setup-node works on both GHA-hosted and self-hosted runners.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
@@ -134,10 +134,10 @@ jobs:
           #   runs-on: ubuntu-24.04-arm    (GHA-hosted; needs Tailscale)
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # ── Connect to private network via Tailscale ──
       # Inert today: only fires when the runner is NOT amd64 (i.e. when an
@@ -162,7 +162,7 @@ jobs:
 
       # ── Login to private registry ──
       - name: Login to docker.brockoff.dev
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: docker.brockoff.dev
           username: ${{ secrets.DOCKER_REGISTRY_USERNAME }}
@@ -171,7 +171,7 @@ jobs:
       # ── Optionally login to GHCR (controlled by repo variable) ──
       - name: Login to GHCR
         if: vars.PUSH_TO_GHCR == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -183,7 +183,7 @@ jobs:
       # all matrix legs succeed.
       - name: Build and push by digest — private registry
         id: build-private
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
@@ -195,7 +195,7 @@ jobs:
       - name: Build and push by digest — GHCR
         if: vars.PUSH_TO_GHCR == 'true'
         id: build-ghcr
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
@@ -252,7 +252,7 @@ jobs:
           touch "/tmp/digests-ghcr/${digest#sha256:}"
 
       - name: Upload digest — private
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-private-${{ matrix.platform_key }}
           path: /tmp/digests-private/*
@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload digest — GHCR
         if: vars.PUSH_TO_GHCR == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-ghcr-${{ matrix.platform_key }}
           path: /tmp/digests-ghcr/*
@@ -284,13 +284,13 @@ jobs:
       packages: write
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # No Tailscale here — this job runs on the self-hosted runner which
       # is already on Bryant's LAN with direct access to docker.brockoff.dev.
 
       - name: Login to docker.brockoff.dev
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: docker.brockoff.dev
           username: ${{ secrets.DOCKER_REGISTRY_USERNAME }}
@@ -298,7 +298,7 @@ jobs:
 
       - name: Login to GHCR
         if: vars.PUSH_TO_GHCR == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -306,7 +306,7 @@ jobs:
 
       # ── Download per-arch digests ──
       - name: Download digests — private
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests-private
           pattern: digests-private-*
@@ -314,7 +314,7 @@ jobs:
 
       - name: Download digests — GHCR
         if: vars.PUSH_TO_GHCR == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests-ghcr
           pattern: digests-ghcr-*
@@ -323,7 +323,7 @@ jobs:
       # ── Re-derive tags (same inputs as docker-build jobs) ──
       - name: Extract metadata (private registry)
         id: meta-private
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: docker.brockoff.dev/hearth
           tags: |
@@ -333,7 +333,7 @@ jobs:
       - name: Extract metadata (GHCR)
         if: vars.PUSH_TO_GHCR == 'true'
         id: meta-ghcr
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
