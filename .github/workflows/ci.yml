@@ -215,15 +215,19 @@ jobs:
           IMAGE="docker.brockoff.dev/hearth@${DIGEST}"
           docker pull "$IMAGE"
           SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
-          # No --rm so a startup crash leaves the container around for `docker
-          # logs` in the failure path.  HEARTH_DATABASE_URL pins SQLite at the
-          # /data volume mount (the Settings default uses a relative path that
-          # resolves to /app/data — unwritable since only /data is chowned to
-          # the hearth user).
+          # No --rm so a startup crash leaves the container around for
+          # `docker logs` in the failure path.  HEARTH_DATABASE_URL pins
+          # SQLite at the /data volume mount (the Settings default uses a
+          # relative path that resolves to /app/data — unwritable since
+          # only /data is chowned to the hearth user).  No -p mapping
+          # because we curl via `docker exec`: the runner is itself a
+          # container sharing the host docker socket, so a -p binding
+          # ends up on the host's loopback rather than the runner's, and
+          # curling 127.0.0.1 from the runner shell can't see it.
           # Disable lifespan steps that reach network or block on a real
-          # external dependency: Ollama isn't running in CI, and we don't
-          # need bootstrap admin / upload recovery to verify /api/health.
-          docker run -d --name hearth-ci -p 18080:8080 \
+          # external dependency: Ollama isn't running in CI, and bootstrap
+          # admin / upload recovery aren't needed to verify /api/health.
+          docker run -d --name hearth-ci \
             -e HEARTH_SESSION_SECRET="$SECRET" \
             -e HEARTH_DATABASE_URL='sqlite+aiosqlite:////data/hearth.db' \
             -e HEARTH_DEBUG=false \
@@ -231,10 +235,13 @@ jobs:
             -e HEARTH_BOOTSTRAP_ADMIN_ON_STARTUP=false \
             -e HEARTH_RECOVER_UPLOADS_ON_STARTUP=false \
             "$IMAGE"
-          # Health endpoint is anonymous; ready as soon as migrations + lifespan finish.
+          # Health endpoint is anonymous; ready as soon as lifespan
+          # finishes.  The runtime image has Python but not curl, so probe
+          # via urllib from inside the container.
+          PROBE='import urllib.request,sys; r=urllib.request.urlopen("http://127.0.0.1:8080/api/health",timeout=2); sys.exit(0 if r.status==200 else 1)'
           READY=0
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:18080/api/health > /dev/null 2>&1; then
+            if docker exec hearth-ci python3 -c "$PROBE" > /dev/null 2>&1; then
               READY=1
               break
             fi
@@ -253,7 +260,9 @@ jobs:
             docker rm -f hearth-ci || true
             exit 1
           fi
-          curl -sf http://127.0.0.1:18080/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True"
+          # Verify the JSON shape, not just the status code.
+          ASSERT='import urllib.request,json,sys; d=json.load(urllib.request.urlopen("http://127.0.0.1:8080/api/health",timeout=2)); assert d.get("ok") is True, d'
+          docker exec hearth-ci python3 -c "$ASSERT"
           docker rm -f hearth-ci
 
       # ── Export digests for the merge job ──
