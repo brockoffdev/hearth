@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.config import get_settings
 from backend.app.db.models import Event, FamilyMember, PipelineStageDuration, Upload
+from backend.app.uploads.few_shot import fetch_recent_corrections
 from backend.app.uploads.pipeline import (
     ExtractedEventRecord,
     StageEvent,
@@ -105,6 +106,15 @@ async def _run_chosen_pipeline(
             result = await session.execute(select(FamilyMember))
             family_members = list(result.scalars().all())
 
+        # Fetch recent corrections for the few-shot VLM prompt (once per run).
+        if settings.few_shot_correction_window > 0:
+            async with session_factory() as session:
+                corrections = await fetch_recent_corrections(
+                    session, limit=settings.few_shot_correction_window
+                )
+        else:
+            corrections = ()
+
         async def on_event_extracted(record: ExtractedEventRecord) -> None:
             """Persist one extracted event to the DB."""
             start_dt = _parse_event_datetime(record.cell_date_iso, record.time_text)
@@ -139,6 +149,7 @@ async def _run_chosen_pipeline(
             family_members,
             stage_delay_seconds=stage_delay_seconds,
             cell_delay_seconds=cell_delay_seconds,
+            few_shot_corrections=corrections,
             on_event_extracted=on_event_extracted,
             data_dir=settings.data_dir,
         ):

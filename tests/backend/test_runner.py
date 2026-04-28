@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from backend.app.auth.passwords import hash_password
 from backend.app.db.base import get_session_factory
-from backend.app.db.models import PipelineStageDuration, Upload, User
+from backend.app.db.models import Event, EventCorrection, PipelineStageDuration, Upload, User
 from backend.app.uploads.pipeline import HEARTH_STAGES_ORDER
 from backend.app.uploads.queue import _reset_for_tests, dequeue, enqueue, queue_position
 from backend.app.uploads.runner import _parse_event_datetime, run_pipeline_for_upload
@@ -351,4 +351,172 @@ async def test_runner_uses_real_pipeline_when_setting_true(
         assert row.provider == "ollama"  # default vision_provider
     finally:
         del os.environ["HEARTH_USE_REAL_PIPELINE"]
+        get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# Few-shot correction wiring tests
+# ---------------------------------------------------------------------------
+
+
+async def _make_correction(
+    db_engine: AsyncEngine,
+    user_id: int,
+    before_title: str,
+    after_title: str,
+) -> None:
+    """Insert a minimal EventCorrection row (via a dummy Event)."""
+    factory = get_session_factory(db_engine)
+    async with factory() as session:
+        from datetime import datetime
+
+        event = Event(
+            title="dummy",
+            start_dt=datetime(2026, 5, 10, 9, 0),
+            status="auto_published",
+        )
+        session.add(event)
+        await session.flush()
+        correction = EventCorrection(
+            event_id=event.id,
+            before_json=f'{{"title": "{before_title}"}}',
+            after_json=f'{{"title": "{after_title}"}}',
+            corrected_by=user_id,
+        )
+        session.add(correction)
+        await session.commit()
+
+
+async def test_runner_passes_corrections_to_pipeline_when_window_gt_zero(
+    db_engine: AsyncEngine,
+) -> None:
+    """When few_shot_correction_window > 0 and corrections exist, runner passes them."""
+    import os
+    from unittest.mock import patch
+
+    from backend.app.config import get_settings
+    from backend.app.uploads.pipeline import HEARTH_STAGES_ORDER, StageEvent
+
+    captured_kwargs: dict[str, object] = {}
+
+    async def _capturing_pipeline(*args, **kwargs):  # type: ignore[no-untyped-def]
+        captured_kwargs.update(kwargs)
+        completed: list[str] = []
+        for stage in HEARTH_STAGES_ORDER:
+            yield StageEvent(stage=stage, completed_stages=completed.copy(), remaining_seconds=0)
+            completed.append(stage)
+
+    get_settings.cache_clear()
+    os.environ["HEARTH_USE_REAL_PIPELINE"] = "true"
+    os.environ["HEARTH_FEW_SHOT_CORRECTION_WINDOW"] = "10"
+    try:
+        factory = get_session_factory(db_engine)
+        user_id = await _make_user(db_engine)
+        # Insert 2 corrections so the runner has something to retrieve.
+        await _make_correction(db_engine, user_id, "Pikuagk Place", "Pineapple Place")
+        await _make_correction(db_engine, user_id, "Dentst Appt", "Dentist Appt")
+
+        upload_id = await _make_upload(db_engine, user_id)
+        await enqueue(upload_id)
+
+        with patch("backend.app.uploads.runner.run_pipeline", side_effect=_capturing_pipeline):
+            await run_pipeline_for_upload(
+                upload_id, factory, stage_delay_seconds=0, cell_delay_seconds=0
+            )
+
+        corrections = captured_kwargs.get("few_shot_corrections", None)
+        assert corrections is not None, "few_shot_corrections not passed to run_pipeline"
+        assert isinstance(corrections, tuple)
+        assert len(corrections) == 2
+        # Values should be dicts with 'before' and 'after' keys
+        for c in corrections:
+            assert "before" in c and "after" in c
+    finally:
+        del os.environ["HEARTH_USE_REAL_PIPELINE"]
+        del os.environ["HEARTH_FEW_SHOT_CORRECTION_WINDOW"]
+        get_settings.cache_clear()
+
+
+async def test_runner_passes_empty_tuple_when_window_is_zero(
+    db_engine: AsyncEngine,
+) -> None:
+    """When few_shot_correction_window=0, runner passes () without querying DB."""
+    import os
+    from unittest.mock import patch
+
+    from backend.app.config import get_settings
+    from backend.app.uploads.pipeline import HEARTH_STAGES_ORDER, StageEvent
+
+    captured_kwargs: dict[str, object] = {}
+
+    async def _capturing_pipeline(*args, **kwargs):  # type: ignore[no-untyped-def]
+        captured_kwargs.update(kwargs)
+        completed: list[str] = []
+        for stage in HEARTH_STAGES_ORDER:
+            yield StageEvent(stage=stage, completed_stages=completed.copy(), remaining_seconds=0)
+            completed.append(stage)
+
+    get_settings.cache_clear()
+    os.environ["HEARTH_USE_REAL_PIPELINE"] = "true"
+    os.environ["HEARTH_FEW_SHOT_CORRECTION_WINDOW"] = "0"
+    try:
+        factory = get_session_factory(db_engine)
+        user_id = await _make_user(db_engine)
+        # Insert a correction — should NOT be retrieved because window=0
+        await _make_correction(db_engine, user_id, "Pikuagk Place", "Pineapple Place")
+
+        upload_id = await _make_upload(db_engine, user_id)
+        await enqueue(upload_id)
+
+        with patch("backend.app.uploads.runner.run_pipeline", side_effect=_capturing_pipeline):
+            await run_pipeline_for_upload(
+                upload_id, factory, stage_delay_seconds=0, cell_delay_seconds=0
+            )
+
+        corrections = captured_kwargs.get("few_shot_corrections", None)
+        assert corrections == (), f"Expected () when window=0, got {corrections!r}"
+    finally:
+        del os.environ["HEARTH_USE_REAL_PIPELINE"]
+        del os.environ["HEARTH_FEW_SHOT_CORRECTION_WINDOW"]
+        get_settings.cache_clear()
+
+
+async def test_runner_passes_empty_tuple_when_table_is_empty(
+    db_engine: AsyncEngine,
+) -> None:
+    """When event_corrections table is empty, runner passes () to run_pipeline."""
+    import os
+    from unittest.mock import patch
+
+    from backend.app.config import get_settings
+    from backend.app.uploads.pipeline import HEARTH_STAGES_ORDER, StageEvent
+
+    captured_kwargs: dict[str, object] = {}
+
+    async def _capturing_pipeline(*args, **kwargs):  # type: ignore[no-untyped-def]
+        captured_kwargs.update(kwargs)
+        completed: list[str] = []
+        for stage in HEARTH_STAGES_ORDER:
+            yield StageEvent(stage=stage, completed_stages=completed.copy(), remaining_seconds=0)
+            completed.append(stage)
+
+    get_settings.cache_clear()
+    os.environ["HEARTH_USE_REAL_PIPELINE"] = "true"
+    os.environ["HEARTH_FEW_SHOT_CORRECTION_WINDOW"] = "10"
+    try:
+        factory = get_session_factory(db_engine)
+        user_id = await _make_user(db_engine)
+        upload_id = await _make_upload(db_engine, user_id)
+        await enqueue(upload_id)
+
+        with patch("backend.app.uploads.runner.run_pipeline", side_effect=_capturing_pipeline):
+            await run_pipeline_for_upload(
+                upload_id, factory, stage_delay_seconds=0, cell_delay_seconds=0
+            )
+
+        corrections = captured_kwargs.get("few_shot_corrections", None)
+        assert corrections == (), f"Expected () for empty table, got {corrections!r}"
+    finally:
+        del os.environ["HEARTH_USE_REAL_PIPELINE"]
+        del os.environ["HEARTH_FEW_SHOT_CORRECTION_WINDOW"]
         get_settings.cache_clear()
