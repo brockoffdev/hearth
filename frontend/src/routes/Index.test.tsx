@@ -22,25 +22,28 @@ const MOCK_USER: User = {
 
 const MOCK_UPLOADS: UploadSummary[] = [
   {
-    id: 1,
+    id: '1',
     status: 'completed',
     image_path: 'uploads/abc.jpg',
     uploaded_at: new Date(Date.now() - 5 * 60_000).toISOString(),
     url: '/api/uploads/1/photo',
+    thumbLabel: 'Apr 27, 10:00 AM',
   },
   {
-    id: 2,
+    id: '2',
     status: 'processing',
     image_path: 'uploads/def.jpg',
     uploaded_at: new Date(Date.now() - 30_000).toISOString(),
     url: '/api/uploads/2/photo',
+    thumbLabel: 'Apr 27, 10:01 AM',
   },
   {
-    id: 3,
-    status: 'queued',
+    id: '3',
+    status: 'failed',
     image_path: 'uploads/ghi.jpg',
     uploaded_at: new Date(Date.now() - 10_000).toISOString(),
     url: '/api/uploads/3/photo',
+    thumbLabel: 'Apr 27, 10:02 AM',
   },
 ];
 
@@ -163,7 +166,7 @@ describe('Index (MobileHome)', () => {
 
     expect(screen.getByText('Done')).not.toBeNull();
     expect(screen.getByText('Processing')).not.toBeNull();
-    expect(screen.getByText('Queued')).not.toBeNull();
+    expect(screen.getByText('Failed')).not.toBeNull();
   });
 
   it('shows error banner when the API request fails', async () => {
@@ -219,11 +222,12 @@ describe('Index (MobileHome)', () => {
 
   it('truncates list to 10 most recent when more than 10 uploads returned', async () => {
     const manyUploads: UploadSummary[] = Array.from({ length: 15 }, (_, i) => ({
-      id: i + 1,
+      id: String(i + 1),
       status: 'completed' as const,
       image_path: `uploads/${i + 1}.jpg`,
       uploaded_at: new Date(Date.now() - i * 60_000).toISOString(),
       url: `/api/uploads/${i + 1}/photo`,
+      thumbLabel: `Apr 27, ${i}:00 AM`,
     }));
 
     vi.stubGlobal(

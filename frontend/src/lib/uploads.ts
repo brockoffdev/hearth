@@ -1,21 +1,47 @@
 import { apiFetch, ApiError } from './api';
 
-export type UploadStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export type UploadStatus = 'processing' | 'completed' | 'failed';
 
-export interface UploadSummary {
-  id: number;
+export interface Upload {
+  id: string;
   status: UploadStatus;
+  // legacy (Phase 3 frontend)
   image_path: string;
-  uploaded_at: string; // ISO
-  url: string;         // /api/uploads/{id}/photo
+  url: string;
+  uploaded_at: string;
+  // Phase 3.5 fields
+  thumbLabel: string;
+  startedAt?: string;
+  finishedAt?: string;
+  current_stage?: string;
+  completed_stages?: string[];
+  cellProgress?: number;
+  totalCells?: number;
+  remaining_seconds?: number;
+  queuedBehind?: number;
+  found?: number;
+  review?: number;
+  durationSec?: number;
+  error?: string;
 }
 
-export async function listUploads(): Promise<UploadSummary[]> {
-  return apiFetch<UploadSummary[]>('/api/uploads');
+/** @deprecated Use {@link Upload} (Phase 3.5+ shape). */
+export type UploadSummary = Upload;
+
+export async function listUploads(): Promise<Upload[]> {
+  return apiFetch<Upload[]>('/api/uploads');
 }
 
-export async function getUpload(id: number): Promise<UploadSummary> {
-  return apiFetch<UploadSummary>(`/api/uploads/${id}`);
+export async function getUpload(id: string | number): Promise<Upload> {
+  return apiFetch<Upload>(`/api/uploads/${id}`);
+}
+
+export async function retryUpload(id: string | number): Promise<Upload> {
+  return apiFetch<Upload>(`/api/uploads/${id}/retry`, { method: 'POST' });
+}
+
+export async function cancelUpload(id: string | number): Promise<void> {
+  return apiFetch<void>(`/api/uploads/${id}`, { method: 'DELETE' });
 }
 
 /**
@@ -26,7 +52,7 @@ export async function getUpload(id: number): Promise<UploadSummary> {
  * boundary that the browser needs to set automatically for FormData bodies.
  * We use fetch directly and let the browser handle the Content-Type header.
  */
-export async function uploadPhoto(file: File): Promise<UploadSummary> {
+export async function uploadPhoto(file: File): Promise<Upload> {
   const formData = new FormData();
   formData.append('photo', file, file.name);
   const res = await fetch('/api/uploads', {
@@ -39,5 +65,5 @@ export async function uploadPhoto(file: File): Promise<UploadSummary> {
     const detail = await res.json().catch(() => ({})) as Record<string, unknown>;
     throw new ApiError(res.status, (detail['detail'] as string | undefined) ?? 'Upload failed');
   }
-  return res.json() as Promise<UploadSummary>;
+  return res.json() as Promise<Upload>;
 }

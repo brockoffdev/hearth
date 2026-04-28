@@ -54,11 +54,12 @@ function makeUploadResponse(
   overrides: Partial<UploadSummary> = {},
 ): UploadSummary {
   return {
-    id: 7,
+    id: '7',
     status: 'processing',
     image_path: 'uploads/7.jpg',
     uploaded_at: '2026-04-27T10:00:00Z',
     url: '/api/uploads/7/photo',
+    thumbLabel: 'Apr 27, 10:00 AM',
     ...overrides,
   };
 }

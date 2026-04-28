@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { listUploads, getUpload, uploadPhoto } from './uploads';
-import type { UploadSummary } from './uploads';
+import { listUploads, getUpload, uploadPhoto, retryUpload, cancelUpload } from './uploads';
+import type { Upload } from './uploads';
 
 function makeResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -9,16 +9,25 @@ function makeResponse(status: number, body: unknown): Response {
   });
 }
 
+function makeEmptyResponse(status: number): Response {
+  return new Response(null, { status });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const MOCK_UPLOAD: UploadSummary = {
-  id: 1,
+const MOCK_UPLOAD: Upload = {
+  id: '1',
   status: 'completed',
   image_path: 'uploads/abc123.jpg',
   uploaded_at: '2026-04-27T10:00:00Z',
   url: '/api/uploads/1/photo',
+  thumbLabel: 'Apr 27, 10:00 AM',
+  finishedAt: '2 hr ago',
+  durationSec: 118,
+  found: 14,
+  review: 3,
 };
 
 describe('listUploads', () => {
@@ -65,7 +74,7 @@ describe('getUpload', () => {
       .mockResolvedValue(makeResponse(200, MOCK_UPLOAD));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await getUpload(1);
+    const result = await getUpload('1');
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/uploads/1',
@@ -77,7 +86,7 @@ describe('getUpload', () => {
   it('calls the correct URL for different IDs', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(makeResponse(200, { ...MOCK_UPLOAD, id: 42 }));
+      .mockResolvedValue(makeResponse(200, { ...MOCK_UPLOAD, id: '42' }));
     vi.stubGlobal('fetch', fetchMock);
 
     await getUpload(42);
@@ -94,7 +103,83 @@ describe('getUpload', () => {
       vi.fn().mockResolvedValue(makeResponse(404, { detail: 'Not found' })),
     );
 
-    await expect(getUpload(999)).rejects.toMatchObject({ status: 404 });
+    await expect(getUpload('999')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('retryUpload', () => {
+  it('calls POST /api/uploads/:id/retry and returns new Upload', async () => {
+    const newUpload: Upload = { ...MOCK_UPLOAD, id: '2', status: 'processing', thumbLabel: 'Apr 27, 10:01 AM' };
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse(201, newUpload));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await retryUpload('1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/uploads/1/retry',
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+    );
+    expect(result).toEqual(newUpload);
+  });
+
+  it('accepts numeric id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse(201, MOCK_UPLOAD));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await retryUpload(42);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/uploads/42/retry',
+      expect.anything(),
+    );
+  });
+
+  it('throws ApiError on 4xx', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeResponse(404, { detail: 'Not found' })),
+    );
+
+    await expect(retryUpload('999')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('cancelUpload', () => {
+  it('calls DELETE /api/uploads/:id and returns void on 204', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeEmptyResponse(204));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await cancelUpload('1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/uploads/1',
+      expect.objectContaining({ method: 'DELETE', credentials: 'include' }),
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it('throws ApiError 400 when cancelling non-queued upload', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeResponse(400, { detail: 'Upload is not queued' })),
+    );
+
+    await expect(cancelUpload('1')).rejects.toMatchObject({
+      status: 400,
+      message: 'Upload is not queued',
+    });
+  });
+
+  it('accepts numeric id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeEmptyResponse(204));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await cancelUpload(42);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/uploads/42',
+      expect.anything(),
+    );
   });
 });
 

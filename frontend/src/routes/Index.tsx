@@ -14,7 +14,6 @@ import styles from './Index.module.css';
 // ---------------------------------------------------------------------------
 
 const STATUS_LABELS: Record<UploadSummary['status'], string> = {
-  queued:     'Queued',
   processing: 'Processing',
   completed:  'Done',
   failed:     'Failed',
