@@ -19,7 +19,7 @@ import json
 import logging
 from typing import Any
 
-from google import generativeai as genai  # type: ignore[import-untyped]
+from google import generativeai as genai
 
 from backend.app.vision import CellPromptContext, ExtractedEvent
 from backend.app.vision._prompt import build_cell_prompt
@@ -52,7 +52,7 @@ class GeminiProvider:
         self.model = model
         self.name = f"gemini:{model}"
         # Configure the Gemini client — idempotent, safe to call at construction.
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key)  # type: ignore[attr-defined]
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -117,7 +117,7 @@ class GeminiProvider:
         prompt = build_cell_prompt(context)
         image_part = {"mime_type": "image/jpeg", "data": image_bytes}
 
-        model_client = genai.GenerativeModel(self.model)
+        model_client = genai.GenerativeModel(self.model)  # type: ignore[attr-defined]
         response = await model_client.generate_content_async(
             [prompt, image_part],
             generation_config={
@@ -137,7 +137,7 @@ class GeminiProvider:
         Never raises — any error (network, auth, etc.) maps to False.
         """
         try:
-            models = await asyncio.to_thread(genai.list_models)
+            models = await asyncio.to_thread(genai.list_models)  # type: ignore[attr-defined]
             return any(m.name.endswith(self.model) for m in models)
         except Exception:
             return False

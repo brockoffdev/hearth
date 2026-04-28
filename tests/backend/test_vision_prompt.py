@@ -10,8 +10,6 @@ Verifies:
 
 from __future__ import annotations
 
-import pytest
-
 from backend.app.vision import CellPromptContext, FamilyPaletteEntry
 from backend.app.vision._prompt import build_cell_prompt
 

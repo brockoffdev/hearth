@@ -51,7 +51,7 @@ def build_cell_prompt(context: CellPromptContext) -> str:
         f'- "color_hex": the dominant ink color in the writing (best-guess hex)\n'
         f'- "owner_guess": the family member name (one of the listed family) whose\n'
         f"  ink color most closely matches\n"
-        f'- "confidence": 0.0–1.0, your confidence in this reading\n'
+        f'- "confidence": 0.0-1.0, your confidence in this reading\n'
         f'- "raw_text": the literal text you read from the handwriting\n'
         f"\n"
         f"If the cell is empty, output []. Do not output explanations, just the JSON."
