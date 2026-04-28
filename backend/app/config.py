@@ -112,6 +112,11 @@ class Settings(BaseSettings):
     # Override via HEARTH_USE_REAL_PIPELINE.
     use_real_pipeline: bool = False
 
+    # How many of the most recent event_corrections to include as few-shot
+    # examples in the VLM prompt. Override via HEARTH_FEW_SHOT_CORRECTION_WINDOW.
+    # Set to 0 to disable few-shot retrieval entirely.
+    few_shot_correction_window: int = 10
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).
