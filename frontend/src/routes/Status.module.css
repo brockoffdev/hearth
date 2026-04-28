@@ -1,0 +1,355 @@
+/* Status route — Uploads inbox */
+/* Token-only. All colours via CSS custom properties. */
+
+/* ─── Page layout ─────────────────────────────────────────────── */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--fontBody);
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 80px; /* clear tab bar */
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+
+.headerBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 54px 22px 8px;
+}
+
+.headerSpacer {
+  flex: 1;
+}
+
+.pullHint {
+  font-size: 12px;
+  color: var(--fgSoft);
+}
+
+.titleBlock {
+  padding: 4px 22px 14px;
+}
+
+.title {
+  font-family: var(--fontDisplay);
+  font-size: 32px;
+  color: var(--fg);
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--fgSoft);
+  margin: 4px 0 0;
+}
+
+.subtitleProcessing {
+  color: var(--accent);
+}
+
+/* ─── CTA button ─────────────────────────────────────────────── */
+
+.ctaWrap {
+  padding: 0 18px 18px;
+}
+
+.ctaBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 65%, var(--fg)));
+  color: #fff;
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--accent) 35%, transparent);
+  text-align: left;
+}
+
+.ctaIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.ctaText {
+  flex: 1;
+}
+
+.ctaTitle {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.ctaSubtitle {
+  font-size: 12px;
+  opacity: 0.9;
+  margin-top: 1px;
+}
+
+/* ─── Section lists ──────────────────────────────────────────── */
+
+.sectionList {
+  padding: 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionListPadded {
+  padding: 0 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ─── Row base ───────────────────────────────────────────────── */
+
+.row {
+  padding: 12px 14px;
+  border-radius: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  position: relative;
+}
+
+/* Variant: inflight (actively running) */
+.row[data-status="inflight"] {
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+  border-color: color-mix(in oklab, var(--accent) 25%, var(--rule));
+}
+
+/* Variant: queued (waiting in queue) */
+.row[data-status="queued"] {
+  background: var(--surface);
+  border-color: var(--rule);
+  opacity: 0.85;
+}
+
+/* Variant: failed */
+.row[data-status="failed"] {
+  border-color: color-mix(in oklab, var(--danger) 25%, var(--rule));
+  align-items: center;
+}
+
+/* Completed — also center-aligned */
+.row[data-status="completed"] {
+  align-items: center;
+}
+
+/* ─── Row body ───────────────────────────────────────────────── */
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Stage headline ─────────────────────────────────────────── */
+
+.stageRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stageLabel {
+  font-weight: 700;
+  color: var(--fg);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Sub-text ───────────────────────────────────────────────── */
+
+.subtext {
+  font-size: 11px;
+  color: var(--fgSoft);
+  margin-top: 3px;
+  font-family: var(--fontMono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Progress bar ───────────────────────────────────────────── */
+
+.progressTrack {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--paperDeep);
+  overflow: hidden;
+  position: relative;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s;
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 50%, transparent);
+}
+
+/* Striped progress for queued rows */
+.progressStripe {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--rule) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+/* ─── Bottom row of inflight/queued ─────────────────────────── */
+
+.rowFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.etaText {
+  font-size: 11px;
+  color: var(--fgSoft);
+}
+
+.etaMono {
+  color: var(--fg);
+  font-family: var(--fontMono);
+}
+
+.openLink {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cancelLink {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fgSoft);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ─── Completed row title ────────────────────────────────────── */
+
+.rowTitle {
+  font-weight: 600;
+  color: var(--fg);
+  font-size: 14px;
+}
+
+/* ─── Position badge wrapper (placed over ThumbTile) ─────────── */
+
+.thumbWrap {
+  position: relative;
+}
+
+.posBadge {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--paperDeep);
+  color: var(--fgSoft);
+  border: 2px solid var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  font-family: var(--fontMono);
+  z-index: 1;
+}
+
+/* ─── Spinner flex-shrink ────────────────────────────────────── */
+
+.spinnerWrap {
+  flex-shrink: 0;
+}
+
+/* ─── Spinner gap / clock icon ───────────────────────────────── */
+
+.clockIcon {
+  flex-shrink: 0;
+}
+
+/* ─── Loading / error / empty states ────────────────────────── */
+
+.centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.emptyIcon {
+  font-size: 48px;
+}
+
+.emptyTitle {
+  font-family: var(--fontDisplay);
+  font-size: 22px;
+  color: var(--fg);
+  margin: 0;
+}
+
+.emptyHint {
+  font-size: 14px;
+  color: var(--fgSoft);
+  max-width: 260px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.errorBanner {
+  margin: 16px 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--danger) 10%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--danger) 25%, var(--rule));
+  font-size: 13px;
+  color: var(--fg);
+}
