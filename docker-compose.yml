@@ -29,6 +29,13 @@ services:
       #      For a daemon on another LAN host:
       #        HEARTH_OLLAMA_ENDPOINT: "http://10.0.0.42:11434"
       HEARTH_OLLAMA_ENDPOINT: "http://ollama:11434"
+      # Use the real VLM pipeline (preprocess + grid detect + per-cell
+      # Ollama call + color match) rather than the fake-stages-on-a-timer
+      # pipeline that Phase 3.5 used for UI testing.  The compose stack
+      # bundles a working Ollama sidecar with the model pre-pulled, so
+      # the real pipeline is the right default; flip to "false" only if
+      # you're running compose without the ollama service.
+      HEARTH_USE_REAL_PIPELINE: "true"
       # The lifespan vision-health probe is on by default in production.
       # See backend/app/config.py for the setting; CI overrides it to
       # false in the smoke test (no Ollama daemon running there).
