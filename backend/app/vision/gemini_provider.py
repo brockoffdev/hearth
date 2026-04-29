@@ -22,6 +22,7 @@ from typing import Any
 from google import generativeai as genai
 
 from backend.app.vision import CellPromptContext, ExtractedEvent
+from backend.app.vision._parse import coerce_to_event_list
 from backend.app.vision._prompt import build_cell_prompt
 
 logger = logging.getLogger(__name__)
@@ -64,17 +65,24 @@ class GeminiProvider:
         try:
             parsed: Any = json.loads(raw_text)
         except json.JSONDecodeError:
-            logger.warning("GeminiProvider: could not parse JSON response from model")
+            logger.warning(
+                "GeminiProvider: could not parse JSON response from model: %r",
+                raw_text[:200],
+            )
             return ()
 
-        if not isinstance(parsed, list):
+        items_raw = coerce_to_event_list(parsed)
+        if not items_raw and parsed not in ([], {}):
             logger.warning(
-                "GeminiProvider: expected JSON array, got %s", type(parsed).__name__
+                "GeminiProvider: could not coerce response to event list "
+                "(type=%s, raw=%r)",
+                type(parsed).__name__,
+                raw_text[:300],
             )
             return ()
 
         events: list[ExtractedEvent] = []
-        for item in parsed:
+        for item in items_raw:
             if not isinstance(item, dict):
                 logger.debug("GeminiProvider: skipping non-dict item: %r", item)
                 continue
