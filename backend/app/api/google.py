@@ -35,6 +35,7 @@ from backend.app.google.calendar_client import (
 )
 from backend.app.google.health_state import clear_oauth_broken, get_oauth_health
 from backend.app.google.oauth_client import build_flow, fetch_token, get_authorization_url
+from backend.app.google.sync import sync_from_gcal
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +406,20 @@ async def create_google_calendar(
         id=result["id"],
         summary=result["summary"],
     )
+
+
+@router.post("/sync")
+async def trigger_gcal_sync(
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    _admin: object = Depends(require_admin),
+) -> dict[str, int]:
+    """Manually trigger a GCal → Hearth sync and return the stats dict.
+
+    Admin only.  Runs synchronously so the caller sees the result immediately.
+    """
+    stats = await sync_from_gcal(db, settings=settings)
+    return stats
 
 
 @router.get("/health", response_model=GoogleHealthResponse)
