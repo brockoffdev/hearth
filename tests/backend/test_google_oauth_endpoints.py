@@ -142,9 +142,15 @@ _FAKE_AUTH_URL = "https://accounts.google.com/o/oauth2/auth?fake=1"
 
 
 def _make_mock_flow(auth_url: str = _FAKE_AUTH_URL) -> MagicMock:
-    """Return a mock Flow whose get_authorization_url path returns *auth_url*."""
+    """Return a mock Flow whose get_authorization_url path returns *auth_url*.
+
+    `code_verifier` is set to a real string so the init handler can persist
+    it to the settings table (the production path stores it for the matching
+    callback's PKCE exchange).
+    """
     mock_flow = MagicMock()
     mock_flow.authorization_url.return_value = (auth_url, "state123")
+    mock_flow.code_verifier = "test-code-verifier-not-real"
     return mock_flow
 
 
