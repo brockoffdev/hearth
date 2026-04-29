@@ -5,6 +5,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from alembic import command
 from alembic.config import Config
@@ -16,12 +17,15 @@ from backend.app.api import router as api_router
 from backend.app.auth.bootstrap import ensure_bootstrap_admin
 from backend.app.config import get_settings
 from backend.app.db.base import get_session_factory
+from backend.app.google.sync import sync_from_gcal
 from backend.app.static import mount_frontend
 from backend.app.uploads.pipeline import refresh_stage_medians_from_db
 from backend.app.uploads.runner import recover_pending_uploads
 from backend.app.vision import get_vision_provider
 
 logger = logging.getLogger(__name__)
+
+_sync_task: asyncio.Task[None] | None = None
 
 # Make sure the application's INFO-level logs are visible by default.
 # alembic's env.py calls fileConfig(...) on startup which used to wipe
@@ -56,6 +60,19 @@ def _run_migrations() -> None:
     cfg = Config(str(ini_path))
     cfg.set_main_option("script_location", "backend/alembic")
     command.upgrade(cfg, "head")
+
+
+async def _gcal_sync_loop(session_factory: Any) -> None:
+    """Background loop: run sync_from_gcal every gcal_sync_interval_seconds."""
+    _settings = get_settings()
+    while True:
+        try:
+            async with session_factory() as session:
+                stats = await sync_from_gcal(session, settings=_settings)
+            logger.info("GCal sync: %s", stats)
+        except Exception:
+            logger.exception("GCal sync failed")
+        await asyncio.sleep(_settings.gcal_sync_interval_seconds)
 
 
 def create_app() -> FastAPI:
@@ -127,7 +144,21 @@ def create_app() -> FastAPI:
                     settings.vision_provider,
                 )
 
+        global _sync_task
+        if settings.gcal_sync_enabled:
+            _sync_task = asyncio.create_task(
+                _gcal_sync_loop(get_session_factory())
+            )
+
         yield
+
+        if _sync_task is not None:
+            _sync_task.cancel()
+            try:
+                await _sync_task
+            except asyncio.CancelledError:
+                pass
+            _sync_task = None
 
     application = FastAPI(
         title=settings.app_name,

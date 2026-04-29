@@ -102,6 +102,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const NON_ADMIN_USER: User = {
+  id: 2,
+  username: 'plainuser',
+  role: 'user',
+  must_change_password: false,
+  must_complete_google_setup: false,
+  created_at: '2026-01-01T00:00:00Z',
+};
+
 // ---------------------------------------------------------------------------
 // Wrapper
 // ---------------------------------------------------------------------------
@@ -117,6 +126,7 @@ function renderIndex() {
               <Route path="/upload" element={<div data-testid="upload-page">Upload</div>} />
               <Route path="/uploads" element={<div data-testid="uploads-page">Uploads</div>} />
               <Route path="/uploads/:id" element={<div data-testid="upload-detail-page">Detail</div>} />
+              <Route path="/admin" element={<div data-testid="admin-page">Admin</div>} />
             </Routes>
           </NewCaptureSheetProvider>
         </AuthProvider>
@@ -402,5 +412,40 @@ describe('Index (MobileHome)', () => {
 
     const link = screen.getByText('View all uploads').closest('a');
     expect(link?.className).not.toMatch(/uploadsLinkActive/);
+  });
+
+  // -------------------------------------------------------------------------
+  // Admin link tests
+  // -------------------------------------------------------------------------
+
+  it('admin users see the admin link', async () => {
+    // MOCK_USER has role='admin' — set in beforeEach fetch stub
+    mocked.mockReturnValue(makeUploadsResult());
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('admin-link')).not.toBeNull(),
+    );
+
+    const link = screen.getByTestId('admin-link');
+    expect(link.getAttribute('href')).toBe('/admin');
+  });
+
+  it('non-admin users do not see the admin link', async () => {
+    // Override fetch to return a non-admin user for this test
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(makeResponse(200, NON_ADMIN_USER)),
+    );
+    mocked.mockReturnValue(makeUploadsResult());
+
+    renderIndex();
+
+    await waitFor(() =>
+      expect(screen.getByText(/hi,\s*plainuser/i)).not.toBeNull(),
+    );
+
+    expect(screen.queryByTestId('admin-link')).toBeNull();
   });
 });

@@ -224,3 +224,56 @@ async def get_event(
             raise
 
     return await asyncio.to_thread(_sync)
+
+
+# Fields we need from each event returned by list
+_LIST_EVENT_FIELDS = {"id", "summary", "start", "end", "status", "extendedProperties", "updated"}
+
+
+async def list_events_in_calendar(
+    creds: Credentials,
+    calendar_id: str,
+    *,
+    time_min: datetime,
+    time_max: datetime,
+) -> list[dict[str, Any]]:
+    """Return events in *calendar_id* between *time_min* and *time_max*.
+
+    Uses ``singleEvents=True, orderBy='startTime'`` so recurring event
+    instances are expanded and the list is time-ordered.
+
+    Returns a list of pruned dicts containing only the fields callers need:
+    ``id``, ``summary``, ``start``, ``end``, ``status``,
+    ``extendedProperties``, ``updated``.
+
+    *creds* must already be valid (i.e. call ``credentials_for`` first and
+    persist any refresh before calling this function).
+    """
+    time_min_str = time_min.strftime("%Y-%m-%dT%H:%M:%SZ")
+    time_max_str = time_max.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _sync() -> list[dict[str, Any]]:
+        service = build("calendar", "v3", credentials=creds)
+        items: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            kwargs: dict[str, Any] = {
+                "calendarId": calendar_id,
+                "timeMin": time_min_str,
+                "timeMax": time_max_str,
+                "singleEvents": True,
+                "orderBy": "startTime",
+            }
+            if page_token:
+                kwargs["pageToken"] = page_token
+            result = service.events().list(**kwargs).execute()
+            items.extend(result.get("items", []))
+            page_token = result.get("nextPageToken")
+            if not page_token:
+                break
+        return [
+            {k: item[k] for k in _LIST_EVENT_FIELDS if k in item}
+            for item in items
+        ]
+
+    return await asyncio.to_thread(_sync)

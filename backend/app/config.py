@@ -133,6 +133,15 @@ class Settings(BaseSettings):
     # Set HEARTH_AUTO_PUBLISH_TO_GCAL=false in tests or dev to disable.
     auto_publish_to_gcal: bool = True
 
+    # When True, a background task runs sync_from_gcal every
+    # gcal_sync_interval_seconds to pull changes from GCal back into Hearth.
+    # Set HEARTH_GCAL_SYNC_ENABLED=false in tests or CI smoke checks.
+    gcal_sync_enabled: bool = True
+
+    # How often (seconds) the GCal → Hearth background sync runs.
+    # Override via HEARTH_GCAL_SYNC_INTERVAL_SECONDS.
+    gcal_sync_interval_seconds: int = 3600  # 60 minutes
+
     # Session cookie configuration.
     session_cookie_name: str = "hearth_session"
     # Set HEARTH_SESSION_COOKIE_SECURE=true in production (HTTPS).

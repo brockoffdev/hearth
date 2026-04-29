@@ -234,6 +234,7 @@ jobs:
             -e HEARTH_VISION_HEALTH_CHECK_ON_STARTUP=false \
             -e HEARTH_BOOTSTRAP_ADMIN_ON_STARTUP=false \
             -e HEARTH_RECOVER_UPLOADS_ON_STARTUP=false \
+            -e HEARTH_GCAL_SYNC_ENABLED=false \
             "$IMAGE"
           # Health endpoint is anonymous; ready as soon as lifespan
           # finishes.  The runtime image has Python but not curl, so probe

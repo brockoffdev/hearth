@@ -12,6 +12,7 @@ import { Status } from './routes/Status';
 import { Review } from './routes/Review';
 import { ReviewItem } from './routes/ReviewItem';
 import { Calendar } from './routes/Calendar';
+import { AdminIndex } from './routes/AdminIndex';
 import { AdminUsers } from './routes/AdminUsers';
 import { AdminSettings } from './routes/AdminSettings';
 import { RequireAuth } from './auth/RequireAuth';
@@ -52,6 +53,7 @@ export function App() {
         <Route path="/review" element={<Review />} />
         <Route path="/review/:id" element={<ReviewItem />} />
         <Route path="/calendar" element={<Calendar />} />
+        <Route path="/admin" element={<AdminIndex />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/" element={<Index />} />
