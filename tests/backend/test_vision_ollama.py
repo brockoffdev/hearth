@@ -135,6 +135,82 @@ async def test_extract_events_handles_invalid_json() -> None:
     assert result == ()
 
 
+async def test_extract_events_unwraps_wrapped_object_responses() -> None:
+    """Real-world quantized models often wrap the array in {events: [...]};
+    parser must unwrap rather than dropping every cell."""
+    inner = [
+        {
+            "title": "Yoga",
+            "time_text": "7:00 AM",
+            "color_hex": "#C0392B",
+            "owner_guess": "Danya",
+            "confidence": 0.9,
+            "raw_text": "Yoga 7am",
+        }
+    ]
+    for wrapper_key in ("events", "items", "data", "results", "extracted"):
+        events_json = json.dumps({wrapper_key: inner})
+        provider = OllamaProvider(_transport=_make_generate_transport(events_json))
+        result = await provider.extract_events_from_cell(_FAKE_IMAGE, _DEFAULT_CONTEXT)
+        assert len(result) == 1, f"failed to unwrap {{'{wrapper_key}': [...]}}"
+        assert result[0].title == "Yoga"
+
+
+async def test_extract_events_unwraps_arbitrary_single_list_key() -> None:
+    """A dict with one list-valued key (any name) is unwrapped to that list."""
+    events_json = json.dumps(
+        {
+            "wall_calendar_events": [
+                {
+                    "title": "Dentist",
+                    "time_text": "2:00 PM",
+                    "color_hex": "#2E5BA8",
+                    "owner_guess": "Bryant",
+                    "confidence": 0.85,
+                    "raw_text": "Dentist 2pm",
+                }
+            ]
+        }
+    )
+    provider = OllamaProvider(_transport=_make_generate_transport(events_json))
+    result = await provider.extract_events_from_cell(_FAKE_IMAGE, _DEFAULT_CONTEXT)
+    assert len(result) == 1
+    assert result[0].title == "Dentist"
+
+
+async def test_extract_events_treats_single_event_object_as_list_of_one() -> None:
+    """A dict that itself looks like an event (has title/raw_text) is wrapped."""
+    events_json = json.dumps(
+        {
+            "title": "Book club",
+            "time_text": "7:00 PM",
+            "color_hex": "#C0392B",
+            "owner_guess": "Danya",
+            "confidence": 0.78,
+            "raw_text": "Book club 7pm",
+        }
+    )
+    provider = OllamaProvider(_transport=_make_generate_transport(events_json))
+    result = await provider.extract_events_from_cell(_FAKE_IMAGE, _DEFAULT_CONTEXT)
+    assert len(result) == 1
+    assert result[0].title == "Book club"
+
+
+async def test_extract_events_handles_empty_object() -> None:
+    """Model returning {} (no events on this cell) yields an empty tuple."""
+    provider = OllamaProvider(_transport=_make_generate_transport("{}"))
+    result = await provider.extract_events_from_cell(_FAKE_IMAGE, _DEFAULT_CONTEXT)
+    assert result == ()
+
+
+async def test_extract_events_handles_truly_unknown_dict_shape() -> None:
+    """A dict with no recognizable shape returns empty without raising."""
+    events_json = json.dumps({"random_key": "random_value", "other": 42})
+    provider = OllamaProvider(_transport=_make_generate_transport(events_json))
+    result = await provider.extract_events_from_cell(_FAKE_IMAGE, _DEFAULT_CONTEXT)
+    assert result == ()
+
+
 async def test_extract_events_skips_malformed_items() -> None:
     """Valid items are kept; non-dict items (string, null) are skipped."""
     events_json = json.dumps(
@@ -188,12 +264,14 @@ async def test_extract_events_includes_confidence_default() -> None:
     assert result[0].confidence == pytest.approx(0.5)
 
 
-async def test_extract_events_handles_non_list_top_level() -> None:
-    """Model returning a dict (not a list) yields empty tuple."""
-    events_json = json.dumps({"title": "Oops, a dict not a list"})
-    provider = OllamaProvider(_transport=_make_generate_transport(events_json))
-    result = await provider.extract_events_from_cell(_FAKE_IMAGE, _DEFAULT_CONTEXT)
-    assert result == ()
+# test_extract_events_handles_non_list_top_level was removed: it asserted
+# the old strict-array-only behavior, which we deliberately relaxed.  The
+# replacement coverage for non-array shapes lives in:
+#   - test_extract_events_unwraps_wrapped_object_responses
+#   - test_extract_events_unwraps_arbitrary_single_list_key
+#   - test_extract_events_treats_single_event_object_as_list_of_one
+#   - test_extract_events_handles_empty_object
+#   - test_extract_events_handles_truly_unknown_dict_shape
 
 
 async def test_extract_events_strips_whitespace_from_title_and_raw_text() -> None:

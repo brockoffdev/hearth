@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 
 from backend.app.vision import CellPromptContext, ExtractedEvent
+from backend.app.vision._parse import coerce_to_event_list
 from backend.app.vision._prompt import build_cell_prompt
 
 logger = logging.getLogger(__name__)
@@ -84,17 +85,26 @@ class OllamaProvider:
         except json.JSONDecodeError:
             # Ollama with format='json' should always return valid JSON, but be
             # defensive; return empty rather than surfacing a parse error.
-            logger.warning("OllamaProvider: could not parse JSON response from model")
+            logger.warning(
+                "OllamaProvider: could not parse JSON response from model: %r",
+                raw_response[:200],
+            )
             return ()
 
-        if not isinstance(parsed, list):
+        items_raw = coerce_to_event_list(parsed)
+        if not items_raw and parsed not in ([], {}):
+            # Got something but couldn't unwrap it — log the shape so future
+            # debugging doesn't have to re-derive what the model emitted.
             logger.warning(
-                "OllamaProvider: expected JSON array, got %s", type(parsed).__name__
+                "OllamaProvider: could not coerce response to event list "
+                "(type=%s, raw=%r)",
+                type(parsed).__name__,
+                raw_response[:300],
             )
             return ()
 
         events: list[ExtractedEvent] = []
-        for item in parsed:
+        for item in items_raw:
             if not isinstance(item, dict):
                 logger.debug("OllamaProvider: skipping non-dict item in response: %r", item)
                 continue
