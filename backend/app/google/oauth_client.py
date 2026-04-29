@@ -25,12 +25,20 @@ def build_flow(
     client_secret: str,
     redirect_uri: str,
     state: str | None = None,
+    code_verifier: str | None = None,
 ) -> Flow:
     """Construct a google_auth_oauthlib Flow from in-memory config.
 
     Uses ``Flow.from_client_config`` to avoid writing a ``client_secret.json``
     file to disk.  The ``state`` parameter, when provided, is passed directly
     to the underlying OAuth library so it is round-tripped by Google's redirect.
+
+    PKCE: when ``code_verifier`` is None (the init path), the library
+    auto-generates a fresh one as soon as ``authorization_url`` is called
+    — the caller should read ``flow.code_verifier`` afterwards and persist
+    it for the matching callback.  When ``code_verifier`` is provided
+    (the callback path), the same verifier the init step generated must
+    be supplied here so ``fetch_token`` can complete the PKCE exchange.
     """
     client_config: dict[str, Any] = {
         "web": {
@@ -48,7 +56,10 @@ def build_flow(
     }
     if state is not None:
         kwargs["state"] = state
-    return Flow.from_client_config(**kwargs)
+    flow = Flow.from_client_config(**kwargs)
+    if code_verifier is not None:
+        flow.code_verifier = code_verifier
+    return flow
 
 
 def get_authorization_url(flow: Flow, state: str) -> str:

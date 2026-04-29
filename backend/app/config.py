@@ -51,9 +51,15 @@ class Settings(BaseSettings):
     session_secret: str
 
     # Public base URL for the Hearth server, used to build OAuth redirect URIs.
-    # Override via HEARTH_PUBLIC_BASE_URL in production (e.g. https://hearth.example.com).
-    # Must NOT have a trailing slash.
-    public_base_url: str = "http://localhost:8080"
+    # When unset (the default), Hearth derives the URL from the incoming
+    # request — this works automatically behind any reverse proxy that
+    # forwards the standard X-Forwarded-Proto / X-Forwarded-Host headers
+    # (uvicorn's --proxy-headers flag is enabled in the production image).
+    # Override via HEARTH_PUBLIC_BASE_URL only if you need a *different*
+    # URL than what the proxy reports — e.g. when the OAuth callback must
+    # be reachable at a vanity hostname different from the inbound host.
+    # If set, must NOT have a trailing slash.
+    public_base_url: str | None = None
 
     # Maximum size in bytes accepted for a single photo upload.
     # Override via HEARTH_MAX_UPLOAD_BYTES.

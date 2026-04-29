@@ -62,4 +62,12 @@ RUN mkdir -p /data && useradd -r -u 1001 hearth && chown -R hearth:hearth /app /
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
+# --proxy-headers + --forwarded-allow-ips=* makes `request.base_url`
+# reflect X-Forwarded-Proto / X-Forwarded-Host from any upstream
+# reverse proxy (Tailscale Funnel, nginx, Cloudflare Tunnel, etc.),
+# which is what makes the OAuth redirect_uri auto-detect work.
+# Trust scope is "*": the operator is responsible for ensuring port
+# 8080 is only reachable from the trusted proxy, not the open internet.
+CMD ["python", "-m", "uvicorn", "backend.app.main:app", \
+     "--host", "0.0.0.0", "--port", "8080", "--log-level", "info", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]

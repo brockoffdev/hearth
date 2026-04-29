@@ -16,7 +16,7 @@ import secrets
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from google.oauth2.credentials import Credentials
 from pydantic import BaseModel
@@ -44,6 +44,7 @@ router = APIRouter()
 _KEY_CLIENT_ID = "google_oauth_client_id"
 _KEY_CLIENT_SECRET = "google_oauth_client_secret"
 _KEY_PENDING_STATE = "google_oauth_pending_state"
+_KEY_PENDING_CODE_VERIFIER = "google_oauth_pending_code_verifier"
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +85,34 @@ class GoogleHealthResponse(BaseModel):
     connected: bool
     broken_reason: str | None = None
     broken_at: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Helper: compute the public base URL for OAuth redirects
+# ---------------------------------------------------------------------------
+
+
+def public_base_url(request: Request, settings: Settings) -> str:
+    """Return the externally-reachable Hearth base URL, without a trailing slash.
+
+    Used to build OAuth redirect URIs.  The frontend computes the same
+    URL from ``window.location.origin`` and shows it to the operator so
+    they can register it in the Google Cloud OAuth client; the backend
+    must produce a byte-identical string when initiating the flow with
+    Google, otherwise Google returns ``redirect_uri_mismatch``.
+
+    Resolution order:
+      1. ``HEARTH_PUBLIC_BASE_URL`` env override (operator-controlled).
+         Honored verbatim — handy when the public URL differs from what
+         the proxy reports (vanity hosts, multi-tenant proxies, etc.).
+      2. ``request.base_url`` derived from the inbound HTTP request.
+         With ``uvicorn --proxy-headers`` enabled (the production image's
+         default), this already reflects ``X-Forwarded-Proto`` and
+         ``X-Forwarded-Host`` from any upstream reverse proxy.
+    """
+    if settings.public_base_url:
+        return settings.public_base_url.rstrip("/")
+    return str(request.base_url).rstrip("/")
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +199,7 @@ async def save_oauth_credentials(
 
 @router.post("/oauth/init", response_model=OauthInitResponse)
 async def oauth_init(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
     _admin: object = Depends(require_admin),
@@ -192,17 +222,23 @@ async def oauth_init(
         )
 
     state = secrets.token_urlsafe(32)
-    await _upsert_setting(db, _KEY_PENDING_STATE, state)
-    await db.commit()
 
-    redirect_uri = f"{settings.public_base_url}/api/google/oauth/callback"
+    redirect_uri = f"{public_base_url(request, settings)}/api/google/oauth/callback"
     flow = build_flow(client_id, client_secret, redirect_uri, state=state)
+    # `authorization_url` lazily populates `flow.code_verifier`; we must
+    # capture it now and persist alongside the CSRF state so the callback
+    # can complete the PKCE exchange against the same verifier.
     authorization_url = get_authorization_url(flow, state)
+
+    await _upsert_setting(db, _KEY_PENDING_STATE, state)
+    await _upsert_setting(db, _KEY_PENDING_CODE_VERIFIER, flow.code_verifier)
+    await db.commit()
     return OauthInitResponse(authorization_url=authorization_url)
 
 
 @router.get("/oauth/callback")
 async def oauth_callback(
+    request: Request,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
@@ -243,10 +279,20 @@ async def oauth_callback(
         params = urlencode({"status": "error", "detail": "OAuth credentials not configured"})
         return RedirectResponse(url=f"{frontend_base}?{params}", status_code=302)
 
-    # Exchange authorization code for tokens.
-    redirect_uri = f"{settings.public_base_url}/api/google/oauth/callback"
+    # Exchange authorization code for tokens.  Must match byte-for-byte
+    # the redirect_uri sent in /oauth/init — Google compares them.  The
+    # PKCE code_verifier saved in /oauth/init must be replayed here too,
+    # otherwise Google returns "invalid_grant: Missing code verifier".
+    redirect_uri = f"{public_base_url(request, settings)}/api/google/oauth/callback"
+    code_verifier = await _get_setting(db, _KEY_PENDING_CODE_VERIFIER)
     try:
-        flow = build_flow(client_id, client_secret, redirect_uri, state=state)
+        flow = build_flow(
+            client_id,
+            client_secret,
+            redirect_uri,
+            state=state,
+            code_verifier=code_verifier,
+        )
         token_data = fetch_token(flow, code)
     except Exception as exc:
         logger.exception("Google token exchange failed: %s", exc)
@@ -281,8 +327,9 @@ async def oauth_callback(
         token_row.expires_at = expires_at
         token_row.scopes = scopes_value
 
-    # Clear the pending state so the token cannot be replayed.
+    # Clear the pending state and PKCE verifier so neither can be replayed.
     await _upsert_setting(db, _KEY_PENDING_STATE, "")
+    await _upsert_setting(db, _KEY_PENDING_CODE_VERIFIER, "")
     await db.commit()
 
     # Successful re-auth clears any prior broken-token flag.
