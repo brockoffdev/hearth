@@ -418,3 +418,21 @@
   color: var(--accent);
   font-weight: 700;
 }
+
+/* ── AdminLink ──────────────────────────────────────────────── */
+
+.adminLink {
+  display: block;
+  text-align: center;
+  padding: 6px 0 16px;
+  text-decoration: none;
+  color: var(--fgSoft);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  transition: color 0.12s;
+}
+
+.adminLink:hover {
+  color: var(--fg);
+}

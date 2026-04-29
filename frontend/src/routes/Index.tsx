@@ -108,6 +108,18 @@ function UploadsLink({ hasInflight }: { hasInflight: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
+// AdminLink — discreet link visible only to admins
+// ---------------------------------------------------------------------------
+
+function AdminLink(): JSX.Element {
+  return (
+    <Link to="/admin" className={styles.adminLink} data-testid="admin-link">
+      ⚙ Admin
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Index (MobileHome)
 // ---------------------------------------------------------------------------
 
@@ -118,6 +130,8 @@ export function Index(): JSX.Element {
 
   const username =
     state.status === 'authenticated' ? state.user.username : '';
+  const isAdmin =
+    state.status === 'authenticated' && state.user.role === 'admin';
 
   const { uploads, isLoading, loadError, inflightCount, longestETA, lastFetchedAt } = useUploads();
   const { count: pendingCount } = usePendingCount();
@@ -213,6 +227,9 @@ export function Index(): JSX.Element {
 
         {/* View all uploads link — always visible */}
         <UploadsLink hasInflight={inflightCount > 0} />
+
+        {/* Admin link — only visible to admins */}
+        {isAdmin && <AdminLink />}
       </main>
 
       <MobileTabBar active="home" badges={{ review: pendingCount }} />
