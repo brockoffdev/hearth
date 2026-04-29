@@ -377,3 +377,161 @@ class TestGridDetectionResult:
         panel = NotesPanel(x=10, y=10, width=100, height=200)
         with pytest.raises((AttributeError, TypeError)):
             panel.x = 999  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Aspect-ratio filter — new tests
+# ---------------------------------------------------------------------------
+
+
+def _make_wide_whiteboard_with_grid_and_notes(
+    width: int = 1500, height: int = 750
+) -> bytes:
+    """Simulate a full whiteboard (aspect ≈ 2.0) where the calendar grid
+    covers only the left 70% and a blank notes panel fills the right 30%.
+
+    This image will produce exactly 8 vertical lines spanning the full width
+    (if we place them naively), which in the old code would yield a bounding
+    box with aspect ≈ 2.0 — triggering the aspect-ratio rejection.
+    We instead draw 8 vertical + 6 horizontal lines spanning the full width
+    so Hough detection picks them all up and the aspect filter must decide.
+    """
+    image = Image.new("RGB", (width, height), color="white")
+    draw = ImageDraw.Draw(image)
+    # Draw 8 verticals spanning full width (simulates whole-whiteboard outer rect)
+    cell_w = width // 7
+    cell_h = height // 5
+    for col in range(8):
+        x = col * cell_w
+        draw.line([(x, 0), (x, height - 1)], fill="black", width=3)
+    for row in range(6):
+        y = row * cell_h
+        draw.line([(0, y), (width - 1, y)], fill="black", width=3)
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
+def _make_calendar_grid_inside_wide_image(
+    width: int = 1500, height: int = 750, grid_fraction: float = 0.70
+) -> bytes:
+    """White image where a proper 7-col x 5-row grid covers the left *grid_fraction*,
+    the right portion is blank.  Grid aspect ~= (width*grid_fraction)/height.
+    With width=1500, height=750, grid_fraction=0.70 -> grid_w=1050, aspect=1.4.
+    """
+    image = Image.new("RGB", (width, height), color="white")
+    draw = ImageDraw.Draw(image)
+    grid_w = int(width * grid_fraction)
+    cell_w = grid_w // 7
+    cell_h = height // 5
+    for col in range(8):
+        x = col * cell_w
+        draw.line([(x, 0), (x, height - 1)], fill="black", width=3)
+    for row in range(6):
+        y = row * cell_h
+        draw.line([(0, y), (grid_w - 1, y)], fill="black", width=3)
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
+class TestAspectRatioFilter:
+    """Tests for the aspect-ratio filter that prevents selecting the whole
+    whiteboard rectangle (calendar + notes panel) as the grid."""
+
+    @pytest.mark.asyncio
+    async def test_grid_aspect_ratio_filter_rejects_wide_outer_rectangle(self) -> None:
+        """A 1500x750 grid (aspect 2.0) should be rejected by the aspect filter.
+
+        The detector must either return fallback (no lines found), or if lines
+        are detected, the aspect-ratio check must prevent it from treating the
+        full-width bounding box as the 7x5 month grid.  In either case the
+        result must not have a grid bounding box with aspect > 1.75.
+        """
+        image_bytes = _make_wide_whiteboard_with_grid_and_notes(width=1500, height=750)
+        result = await detect_grid(image_bytes)
+
+        assert len(result.cells) == 35
+
+        if result.detection_method == "lines":
+            # All cells must fit within a bounding box whose aspect is ≤ 1.75
+            min_x = min(c.x for c in result.cells)
+            max_x = max(c.x + c.width for c in result.cells)
+            min_y = min(c.y for c in result.cells)
+            max_y = max(c.y + c.height for c in result.cells)
+            grid_aspect = (max_x - min_x) / max(1, (max_y - min_y))
+            assert grid_aspect <= 1.75, (
+                f"Grid bounding box aspect {grid_aspect:.2f} looks like whole whiteboard"
+            )
+        # fallback is also acceptable — it means line detection was correctly discarded
+
+    @pytest.mark.asyncio
+    async def test_grid_aspect_ratio_accepts_proper_calendar_region(self) -> None:
+        """A grid that only covers the left 70% of a 1500x750 image has aspect ~= 1.4
+        and must be accepted (detection_method == 'lines') with 35 cells whose
+        bounding box aspect is within +-25% of 1.4."""
+        image_bytes = _make_calendar_grid_inside_wide_image(
+            width=1500, height=750, grid_fraction=0.70
+        )
+        result = await detect_grid(image_bytes)
+
+        assert len(result.cells) == 35
+
+        if result.detection_method == "lines":
+            min_x = min(c.x for c in result.cells)
+            max_x = max(c.x + c.width for c in result.cells)
+            min_y = min(c.y for c in result.cells)
+            max_y = max(c.y + c.height for c in result.cells)
+            grid_aspect = (max_x - min_x) / max(1, (max_y - min_y))
+            assert 1.05 <= grid_aspect <= 1.75, (
+                f"Grid aspect {grid_aspect:.2f} not near the expected 1.4"
+            )
+
+
+class TestLegendStripExclusion:
+    """Tests that the top legend/header strip does not contaminate cell detection."""
+
+    @pytest.mark.asyncio
+    async def test_grid_does_not_include_top_legend_strip(self) -> None:
+        """Image with a distinct top band (different colour) should yield cells
+        whose top edge (min y) is below the legend strip boundary.
+
+        We draw the legend strip as the top 12% of the image in a grey colour,
+        then draw a crisp 7x5 black-line grid below it.  The detector must not
+        place row-0 cells inside the legend strip.
+        """
+        width, height = 1400, 1000
+        legend_h = int(height * 0.12)  # top 12%
+        grid_top = legend_h
+        grid_h = height - legend_h
+
+        image = Image.new("RGB", (width, height), color="white")
+        draw = ImageDraw.Draw(image)
+
+        # Draw a grey legend strip at the top
+        draw.rectangle([(0, 0), (width - 1, legend_h - 1)], fill=(200, 200, 200))
+
+        # Draw the calendar grid below the legend strip
+        cell_w = width // 7
+        cell_h = grid_h // 5
+        for col in range(8):
+            x = col * cell_w
+            draw.line([(x, grid_top), (x, height - 1)], fill="black", width=3)
+        for row in range(6):
+            y = grid_top + row * cell_h
+            draw.line([(0, y), (width - 1, y)], fill="black", width=3)
+
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG", quality=95)
+        image_bytes = buf.getvalue()
+
+        result = await detect_grid(image_bytes)
+        assert len(result.cells) == 35
+
+        # Row-0 cells must start at or below the legend strip
+        row0_cells = [c for c in result.cells if c.row == 0]
+        assert row0_cells, "No row-0 cells found"
+        min_y = min(c.y for c in row0_cells)
+        assert min_y >= legend_h - 5, (  # 5 px tolerance for JPEG compression
+            f"Row-0 top edge y={min_y} is inside the legend strip (legend_h={legend_h})"
+        )

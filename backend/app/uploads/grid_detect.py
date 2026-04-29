@@ -147,6 +147,20 @@ def _detect_grid_via_lines(
 
     Returns *(cells, notes)* on success; *(None, None)* if detection failed
     (not enough lines or ambiguous clusters).
+
+    The detector applies two filters to avoid selecting the outer whiteboard
+    rectangle (which includes the right-side notes panel) instead of the
+    calendar grid proper:
+
+    1. **Internal-line-count filter**: requires ≥6 horizontal and ≥8 vertical
+       clustered lines inside the candidate region.  A notes panel or a
+       colour-legend strip alone cannot satisfy this.
+
+    2. **Aspect-ratio filter**: after selecting the 8 vertical / 6 horizontal
+       grid lines, the bounding box width/height ratio must be within ±25% of
+       the expected 7-col/5-row ratio (≈1.4).  If the ratio is too wide
+       (> ~1.75) the detector found the whole whiteboard and returns None so
+       the caller falls back gracefully.
     """
     h, w = array.shape[:2]
 
@@ -188,7 +202,7 @@ def _detect_grid_via_lines(
     h_lines = _cluster_coordinates(horizontals, tolerance=int(h * 0.02))
     v_lines = _cluster_coordinates(verticals, tolerance=int(w * 0.02))
 
-    # Need ≥6 horizontal and ≥8 vertical lines
+    # Need ≥6 horizontal and ≥8 vertical lines (filter 1: internal line count)
     if len(h_lines) < 6 or len(v_lines) < 8:
         return None, None
 
@@ -198,6 +212,26 @@ def _detect_grid_via_lines(
 
     if len(h_lines) != 6 or len(v_lines) != 8:
         return None, None
+
+    # Filter 2: aspect-ratio check on the candidate grid bounding box.
+    # A 7-column x 5-row month grid has width/height ~= 7/5 = 1.4.
+    # The whole whiteboard (calendar + notes panel) is typically 1.8-2.0.
+    # Reject if the ratio deviates by more than +-25% from the ideal 1.4.
+    grid_width = float(v_lines[7] - v_lines[0])
+    grid_height = float(h_lines[5] - h_lines[0])
+    if grid_height > 0:
+        aspect = grid_width / grid_height
+        ideal_aspect = 7.0 / 5.0  # 1.4
+        aspect_tolerance = 0.25  # +-25%
+        if abs(aspect - ideal_aspect) > ideal_aspect * aspect_tolerance:
+            logger.debug(
+                "grid_detect: candidate grid aspect %.2f outside [%.2f, %.2f]; "
+                "likely grabbed whole whiteboard - falling back",
+                aspect,
+                ideal_aspect * (1 - aspect_tolerance),
+                ideal_aspect * (1 + aspect_tolerance),
+            )
+            return None, None
 
     # Build the 35 cell boxes
     cells: list[CellBox] = []

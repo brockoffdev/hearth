@@ -161,3 +161,101 @@ def test_prompt_contains_all_required_fields() -> None:
     prompt = build_cell_prompt(_DEFAULT_CONTEXT)
     for field in ("title", "time_text", "color_hex", "owner_guess", "confidence", "raw_text"):
         assert f'"{field}"' in prompt, f"Expected field '{field}' in prompt"
+
+
+# ---------------------------------------------------------------------------
+# New: empty-cell instruction (Task B.1)
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_includes_empty_cell_instruction() -> None:
+    """Prompt must explicitly instruct the model to return [] for empty cells
+    and for cells containing only printed labels or isolated characters."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    # The instruction must mention both the empty-cell case and the [] output
+    assert "empty" in prompt.lower()
+    assert "[]" in prompt
+
+
+def test_prompt_empty_cell_instruction_covers_day_names() -> None:
+    """Prompt must explicitly call out day-of-week labels (Sat, Mon, etc.)
+    as cases that should return []."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    # The word 'Sat' or a day-name abbreviation must appear in refusal context
+    assert "Sat" in prompt or "day-name" in prompt or "day-of-week" in prompt
+
+
+def test_prompt_empty_cell_instruction_covers_single_characters() -> None:
+    """Prompt must warn against extracting events from single isolated chars."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    assert "single" in prompt.lower() or "isolated" in prompt.lower()
+
+
+# ---------------------------------------------------------------------------
+# New: rejection examples (Task B.2)
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_includes_rejection_examples() -> None:
+    """Prompt must include at least one negative example where the correct
+    answer is [] — e.g. a day-name or a 'TO DO' notes-section fragment."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    # Check for 'TO DO' or 'Sat' appearing alongside a '[]' return instruction
+    has_todo_example = "TO DO" in prompt and "[]" in prompt
+    has_sat_example = "Sat" in prompt and "[]" in prompt
+    assert has_todo_example or has_sat_example, (
+        "Prompt must include at least one negative example (day-name or 'TO DO' → [])"
+    )
+
+
+def test_prompt_includes_positive_example() -> None:
+    """Prompt must include a positive example showing a well-formed event object."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    # The worked example should show a JSON object with at least title and confidence
+    assert '"title"' in prompt
+    assert '"confidence"' in prompt
+    # The BDay example in the worked examples block
+    assert "BDay" in prompt
+
+
+# ---------------------------------------------------------------------------
+# New: confidence calibration guidance (Task B.3)
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_warns_against_default_confidence_value() -> None:
+    """Prompt must warn the model not to use 0.85 as a default confidence."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    assert "Never use 0.85 as a default" in prompt or "never use 0.85" in prompt.lower()
+
+
+def test_prompt_confidence_scale_low_end() -> None:
+    """Prompt must define what confidence < 0.5 means."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    assert "< 0.5" in prompt
+
+
+def test_prompt_confidence_scale_mid_range() -> None:
+    """Prompt must define what confidence 0.5-0.75 means."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    assert "0.5" in prompt and "0.75" in prompt
+
+
+def test_prompt_confidence_scale_high_end() -> None:
+    """Prompt must define what confidence 0.75-0.95 means."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    assert "0.75" in prompt and "0.95" in prompt
+
+
+# ---------------------------------------------------------------------------
+# New: ink color / color_hex guidance (Task B.4)
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_color_hex_refers_to_ink_not_background() -> None:
+    """Prompt must clarify that color_hex is the writer's ink color,
+    not the cell background color."""
+    prompt = build_cell_prompt(_DEFAULT_CONTEXT)
+    assert "ink" in prompt.lower()
+    # Must not leave the reader thinking it's the background
+    assert "background" in prompt.lower() or "writer" in prompt.lower()
